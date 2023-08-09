@@ -1,0 +1,111 @@
+{
+    "name": "my-dev-tools",
+    "displayName": "My Dev Tools",
+    "description": "A simple extension to serve MY programming needs. It contains a number of small features that I need in MY work hence the prefix 'My'. Nevertheless, you may find something here that will also be useful to you.",
+    "icon": "images/icon.png",
+    "version": "1.0.0",
+    "publisher": "przpl",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/przpl/my-dev-tools"
+    },
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "categories": [
+        "Other",
+        "Snippets",
+        "Formatters"
+    ],
+    "keywords": [
+        "dev",
+        "tools",
+        "helper"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "myDevTools.openNearestIndex",
+                "title": "Go to nearest index.ts"
+            },
+            {
+                "command": "myDevTools.addToExportsInIndex",
+                "title": "Add to exports in index.ts"
+            },
+            {
+                "command": "myDevTools.createScssModule",
+                "title": "Create SCSS Module"
+            },
+            {
+                "command": "myDevTools.createNestJSController",
+                "title": "Create controller"
+            },
+            {
+                "command": "myDevTools.openNearestNestJSModule",
+                "title": "Go to NestJS module"
+            }
+        ],
+        "menus": {
+            "explorer/context": [
+                {
+                    "command": "myDevTools.createScssModule",
+                    "when": "resourceLangId == typescriptreact",
+                    "group": "5_create"
+                },
+                {
+                    "submenu": "NestJsToolsSubmenu",
+                    "when": "explorerResourceIsFolder",
+                    "group": "NestJsTools"
+                }
+            ],
+            "NestJsToolsSubmenu": [
+                {
+                    "command": "myDevTools.createNestJSController",
+                    "group": "NestJsTools"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "command": "myDevTools.createScssModule",
+                    "title": "Create SCSS Module"
+                }
+            ]
+        },
+        "submenus": [
+            {
+                "label": "NestJS tools",
+                "id": "NestJsToolsSubmenu",
+                "items": [
+                    {
+                        "command": "myDevTools.createNestJSController",
+                        "group": "NestJsTools"
+                    }
+                ]
+            }
+        ]
+    },
+    "scripts": {
+        "watch": "tsc -watch -p .",
+        "pack": "npm run vscode:prepublish && vsce package",
+        "vscode:prepublish": "npm run esbuild-base -- --minify",
+        "esbuild-base": "rimraf out && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+        "publish": "vsce publish"
+    },
+    "devDependencies": {
+        "@types/dashify": "^1.0.1",
+        "@types/node": "^20.4.8",
+        "@types/pascalcase": "^1.0.1",
+        "@types/vscode": "^1.75.1",
+        "@vscode/vsce": "^2.20.1",
+        "esbuild": "^0.19.0",
+        "rimraf": "^5.0.1",
+        "typescript": "^5.1.6"
+    },
+    "dependencies": {
+        "dashify": "^2.0.0",
+        "pascal-case": "^3.1.2",
+        "ts-morph": "^19.0.0"
+    }
+}
