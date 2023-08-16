@@ -4,6 +4,7 @@ import { addToExportsInIndex } from "./features/addToExportsInIndex";
 import { createNestJsController } from "./features/nestjs/createNestJsController";
 import { openNearestFile } from "./features/openNearestFile";
 import { createScssModule } from "./features/react/createScssModule";
+import { addPropsToComponent } from "./features/react/addPropsToComponent";
 
 export function activate(context: vscode.ExtensionContext) {
     // Generic
@@ -12,6 +13,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // React
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.createScssModule", createScssModule));
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.addPropsToComponent", addPropsToComponent));
 
     // NestJS
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.createNestJSController", createNestJsController));
