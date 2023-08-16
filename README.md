@@ -18,6 +18,7 @@ If there is a larger group of common functions in the extension then this will b
 | Option             | Available in          | Description                                                                                                                           |
 | ------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Create SCSS Module | TSX file context menu | Right click on a \*.tsx file to create corresponding \*.module.scss file. Styles import will be automatically added to the component. |
+| Add Props to Component | Command palette | Add a Props interface to a React component and modify the component to accept these props |
 
 ## NestJS
 
