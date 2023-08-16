@@ -45,6 +45,10 @@
             {
                 "command": "myDevTools.openNearestNestJSModule",
                 "title": "Go to NestJS module"
+            },
+            {
+                "command": "myDevTools.addPropsToComponent",
+                "title": "Add Props to Component"
             }
         ],
         "menus": {
