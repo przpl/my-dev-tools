@@ -3,7 +3,7 @@
     "displayName": "My Dev Tools",
     "description": "A simple extension to serve MY programming needs. It contains a number of small features that I need in MY work hence the prefix 'My'. Nevertheless, you may find something here that will also be useful to you.",
     "icon": "images/icon.png",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "publisher": "przpl",
     "license": "MIT",
     "repository": {
