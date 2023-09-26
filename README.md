@@ -8,10 +8,11 @@ If there is a larger group of common functions in the extension then this will b
 
 ## General
 
-| Option                     | Available in    | Description                                                                                                               |
-| -------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Go to nearest index.ts     | Command palette | Open nearest index.ts file in one of the parent folders.                                                                  |
-| Add to exports in index.ts | Command palette | Add selected symbol to exports in nearest index.ts. If no symbol is selected then everything will be exported (export \*) |
+| Option                     | Available in      | Description                                                                                                               |
+| -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Go to nearest index.ts     | Command palette   | Open nearest index.ts file in one of the parent folders.                                                                  |
+| Add to exports in index.ts | Command palette   | Add selected symbol to exports in nearest index.ts. If no symbol is selected then everything will be exported (export \*) |
+| Rename to...               | File context menu | Rename file to camelCase, PascalCase, snake_case or kebab-case.                                                           |
 
 ## React
 
