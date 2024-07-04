@@ -156,20 +156,20 @@
         "publish": "vsce publish"
     },
     "devDependencies": {
-        "@types/dashify": "^1.0.1",
-        "@types/lodash": "^4.14.199",
-        "@types/node": "^20.7.0",
-        "@types/pascalcase": "^1.0.1",
+        "@types/dashify": "^1.0.3",
+        "@types/lodash": "^4.17.6",
+        "@types/node": "^20.14.9",
+        "@types/pascalcase": "^1.0.3",
         "@types/vscode": "^1.75.1",
-        "@vscode/vsce": "^2.21.0",
-        "esbuild": "^0.19.3",
-        "rimraf": "^5.0.4",
-        "typescript": "^5.2.2"
+        "@vscode/vsce": "^2.29.0",
+        "esbuild": "^0.23.0",
+        "rimraf": "^5.0.7",
+        "typescript": "^5.5.3"
     },
     "dependencies": {
         "dashify": "^2.0.0",
         "lodash": "^4.17.21",
         "pascal-case": "^3.1.2",
-        "ts-morph": "^20.0.0"
+        "ts-morph": "^23.0.0"
     }
 }
