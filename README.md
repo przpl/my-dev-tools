@@ -16,9 +16,31 @@ If there is a larger group of common functions in the extension then this will b
 
 ## React
 
-| Option             | Available in          | Description                                                                                                                           |
-| ------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Create SCSS Module | TSX file context menu | Right click on a \*.tsx file to create corresponding \*.module.scss file. Styles import will be automatically added to the component. |
+| Option                     | Available in                | Description                                                                                                                           |
+| -------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Create SCSS Module         | TSX file context menu       | Right click on a \*.tsx file to create corresponding \*.module.scss file. Styles import will be automatically added to the component. |
+| Update Props Destructuring | Automatic / Command palette | Updates the props destructuring object in React components to match the Props interface. Can be triggered manually or automatically.  |
+
+### Update Props Destructuring
+
+This feature helps keep your React component props up-to-date with their interface definitions:
+
+-   Can be manually triggered using the "Update React Props destructuring" command in the command palette.
+-   Automatic real-time updates are disabled by default but can be enabled in settings.
+-   Real-time updates can be toggled on/off using the "My Dev Tools: Toggle React Real-Time Props Update" command.
+-   Configuration: Set `myDevTools.enableRealTimePropsUpdate` to `true` or `false` (default) in your VS Code settings.
+
+To enable real-time updates:
+
+1. Open VS Code settings (File > Preferences > Settings)
+2. Search for "My Dev Tools"
+3. Check the box next to "Enable real-time updates for React Props destructuring"
+
+Or add this to your `settings.json`:
+
+```json
+"myDevTools.enableRealTimePropsUpdate": true
+```
 
 ## NestJS
 
