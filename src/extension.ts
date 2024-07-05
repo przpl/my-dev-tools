@@ -29,7 +29,7 @@ export function activateUpdatePropsDestructuring(context: vscode.ExtensionContex
     let timeout: NodeJS.Timeout | undefined;
     const updatePropsHandler = (document: vscode.TextDocument) => {
         const config = vscode.workspace.getConfiguration("myDevTools");
-        const enableRealTimeUpdate = config.get<boolean>("enableRealTimePropsUpdate", true);
+        const enableRealTimeUpdate = config.get<boolean>("enableRealTimePropsUpdate", false);
 
         if (enableRealTimeUpdate && document.languageId === "typescriptreact") {
             if (timeout) {
