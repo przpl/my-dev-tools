@@ -31,15 +31,12 @@ export async function updatePropsDestructuring(document: vscode.TextDocument) {
 
     if (hasChanges) {
         const updatedText = sourceFile.getFullText();
-        const editor = await vscode.window.showTextDocument(document);
+        const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
 
-        await editor.edit(
-            (editBuilder) => {
-                const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
-                editBuilder.replace(fullRange, updatedText);
-            },
-            { undoStopBefore: false, undoStopAfter: false }
-        );
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(document.uri, fullRange, updatedText);
+
+        return vscode.workspace.applyEdit(edit);
     }
 }
 
