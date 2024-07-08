@@ -1,4 +1,4 @@
-import { FunctionDeclaration, InterfaceDeclaration, Project, SyntaxKind } from "ts-morph";
+import { FunctionDeclaration, InterfaceDeclaration, Project, SyntaxKind, Type } from "ts-morph";
 import * as vscode from "vscode";
 
 let project: Project | null = null;
@@ -66,7 +66,7 @@ function updateFunctionParameter(interfaceDeclaration: InterfaceDeclaration, fun
     }
 
     const actualProperties = object.getElements();
-    const expectedPropertiesName = interfaceDeclaration.getProperties().map((prop) => prop.getName());
+    const expectedPropertiesName = getAllPropertiesIncludingExtended(interfaceDeclaration);
 
     let needsUpdate = false;
     if (actualProperties.length !== expectedPropertiesName.length) {
@@ -91,4 +91,22 @@ function updateFunctionParameter(interfaceDeclaration: InterfaceDeclaration, fun
     }
 
     return false;
+}
+
+function getAllPropertiesIncludingExtended(interfaceDeclaration: InterfaceDeclaration): string[] {
+    const properties = new Set<string>();
+    const typesToProcess: Type[] = [interfaceDeclaration.getType()];
+
+    while (typesToProcess.length > 0) {
+        const currentType = typesToProcess.pop()!;
+
+        currentType.getProperties().forEach((prop) => {
+            properties.add(prop.getName());
+        });
+
+        const baseTypes = currentType.getBaseTypes();
+        typesToProcess.push(...baseTypes);
+    }
+
+    return Array.from(properties);
 }
