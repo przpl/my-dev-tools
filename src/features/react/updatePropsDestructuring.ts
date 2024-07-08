@@ -1,4 +1,4 @@
-import { FunctionDeclaration, InterfaceDeclaration, Project, SyntaxKind, Type } from "ts-morph";
+import { FunctionDeclaration, InterfaceDeclaration, Project, SyntaxKind } from "ts-morph";
 import * as vscode from "vscode";
 
 let project: Project | null = null;
@@ -18,6 +18,9 @@ export async function updatePropsDestructuring(document: vscode.TextDocument) {
     }
 
     const functions = sourceFile.getDescendantsOfKind(SyntaxKind.FunctionDeclaration);
+    if (functions.length === 0) {
+        return;
+    }
 
     let hasChanges = false;
     interfaces.forEach((interfaceDeclaration) => {
@@ -59,13 +62,12 @@ function updateFunctionParameter(interfaceDeclaration: InterfaceDeclaration, fun
         return false;
     }
 
-    const objectString = object.getText();
-    if (objectString.includes("...")) {
+    const actualProperties = object.getElements();
+    if (actualProperties.length > 0 && actualProperties[actualProperties.length - 1].getDotDotDotToken()) {
         // Skip rest parameters, for example: ({ ...props }: Props)
         return false;
     }
 
-    const actualProperties = object.getElements();
     const expectedPropertiesName = getAllPropertiesIncludingExtended(interfaceDeclaration);
 
     let needsUpdate = false;
@@ -76,26 +78,28 @@ function updateFunctionParameter(interfaceDeclaration: InterfaceDeclaration, fun
         needsUpdate = !actualPropertiesNames.every((prop) => expectedPropertiesName.includes(prop));
     }
 
-    if (needsUpdate) {
-        let separator = " ";
-        if (objectString.includes("\r\n")) {
-            separator = "\r\n";
-        } else if (objectString.includes("\n")) {
-            separator = "\n";
-        }
-
-        const newBindingPattern = "{" + separator + `${expectedPropertiesName.join(`,${separator}`)}` + separator + "}";
-        object.replaceWithText(newBindingPattern);
-        object.formatText();
-        return true;
+    if (!needsUpdate) {
+        return false;
     }
 
-    return false;
+    let separator = " ";
+    const objectString = object.getText();
+    if (objectString.includes("\r\n")) {
+        separator = "\r\n";
+    } else if (objectString.includes("\n")) {
+        separator = "\n";
+    }
+
+    const newBindingPattern = "{" + separator + `${expectedPropertiesName.join(`,${separator}`)}` + separator + "}";
+    object.replaceWithText(newBindingPattern);
+    object.formatText();
+
+    return true;
 }
 
 function getAllPropertiesIncludingExtended(interfaceDeclaration: InterfaceDeclaration): string[] {
     const properties = new Set<string>();
-    const typesToProcess: Type[] = [interfaceDeclaration.getType()];
+    const typesToProcess = [interfaceDeclaration.getType()];
 
     while (typesToProcess.length > 0) {
         const currentType = typesToProcess.pop()!;
