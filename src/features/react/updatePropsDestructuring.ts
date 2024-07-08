@@ -82,15 +82,7 @@ function updateFunctionParameter(interfaceDeclaration: InterfaceDeclaration, fun
         return false;
     }
 
-    let separator = " ";
-    const objectString = object.getText();
-    if (objectString.includes("\r\n")) {
-        separator = "\r\n";
-    } else if (objectString.includes("\n")) {
-        separator = "\n";
-    }
-
-    const newBindingPattern = "{" + separator + `${expectedPropertiesName.join(`,${separator}`)}` + separator + "}";
+    const newBindingPattern = `{ ${expectedPropertiesName.join(", ")} }`;
     object.replaceWithText(newBindingPattern);
     object.formatText();
 
