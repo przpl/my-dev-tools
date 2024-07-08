@@ -70,16 +70,11 @@ function updateFunctionParameter(interfaceDeclaration: InterfaceDeclaration, fun
 
     const expectedPropertiesName = getAllPropertiesIncludingExtended(interfaceDeclaration);
 
-    let needsUpdate = false;
-    if (actualProperties.length !== expectedPropertiesName.length) {
-        needsUpdate = true;
-    } else {
+    if (actualProperties.length === expectedPropertiesName.length) {
         const actualPropertiesNames = actualProperties.map((i) => i.getText());
-        needsUpdate = !actualPropertiesNames.every((prop) => expectedPropertiesName.includes(prop));
-    }
-
-    if (!needsUpdate) {
-        return false;
+        if (actualPropertiesNames.every((prop) => expectedPropertiesName.includes(prop))) {
+            return false;
+        }
     }
 
     const newBindingPattern = `{ ${expectedPropertiesName.join(", ")} }`;
