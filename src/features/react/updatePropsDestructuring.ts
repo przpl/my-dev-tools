@@ -10,7 +10,7 @@ export async function updatePropsDestructuring(document: vscode.TextDocument) {
         project = new Project();
     }
 
-    const sourceFile = project.createSourceFile("temp.ts", text, { overwrite: true });
+    const sourceFile = project.createSourceFile("temp.tsx", text, { overwrite: true });
 
     const interfaces = sourceFile.getDescendantsOfKind(SyntaxKind.InterfaceDeclaration);
     if (interfaces.length === 0) {
@@ -71,7 +71,7 @@ function updateFunctionParameter(interfaceDeclaration: InterfaceDeclaration, fun
     const expectedPropertiesName = getAllPropertiesIncludingExtended(interfaceDeclaration);
 
     if (actualProperties.length === expectedPropertiesName.length) {
-        const actualPropertiesNames = actualProperties.map((i) => i.getText());
+        const actualPropertiesNames = actualProperties.map((i) => i.getName());
         if (actualPropertiesNames.every((prop) => expectedPropertiesName.includes(prop))) {
             return false;
         }
