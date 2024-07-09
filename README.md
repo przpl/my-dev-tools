@@ -16,11 +16,12 @@ If there is a larger group of common functions in the extension then this will b
 
 ## React
 
-| Option                     | Available in                | Description                                                                                                                           |
-| -------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Create SCSS Module         | TSX file context menu       | Right click on a \*.tsx file to create corresponding \*.module.scss file. Styles import will be automatically added to the component. |
-| Update Props Destructuring | Automatic / Command palette | Updates the props destructuring object in React components to match the Props interface. Can be triggered manually or automatically.  |
-| Add className prop         | Command palette             | Adds a className prop to a React component, including updating the Props interface and component usage.                               |
+| Option                             | Available in                | Description                                                                                                                           |
+| ---------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Create SCSS Module                 | TSX file context menu       | Right click on a \*.tsx file to create corresponding \*.module.scss file. Styles import will be automatically added to the component. |
+| Update Props Destructuring         | Automatic / Command palette | Updates the props destructuring object in React components to match the Props interface. Can be triggered manually or automatically.  |
+| Add className prop                 | Command palette             | Adds a className prop to a React component, including updating the Props interface and component usage.                               |
+| Add empty props to React component | Command palette             | Adds an empty Props interface to a React component that doesn't have any props.                                                       |
 
 ### Update Props Destructuring
 

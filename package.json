@@ -65,6 +65,10 @@
                 "title": "Add className to React component and its props"
             },
             {
+                "command": "myDevTools.addPropsToComponent",
+                "title": "Add empty props to React component"
+            },
+            {
                 "command": "myDevTools.createNestJSController",
                 "title": "Create controller"
             },
@@ -145,6 +149,10 @@
                 },
                 {
                     "command": "myDevTools.addClassNameProp",
+                    "when": "editorLangId == typescriptreact"
+                },
+                {
+                    "command": "myDevTools.addPropsToComponent",
                     "when": "editorLangId == typescriptreact"
                 }
             ]
