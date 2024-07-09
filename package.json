@@ -61,6 +61,10 @@
                 "title": "My Dev Tools: Toggle React Real-Time Props Update"
             },
             {
+                "command": "myDevTools.addClassNameProp",
+                "title": "Add className to React component and its props"
+            },
+            {
                 "command": "myDevTools.createNestJSController",
                 "title": "Create controller"
             },
@@ -138,6 +142,10 @@
                 },
                 {
                     "command": "myDevTools.toggleRealTimePropsUpdate"
+                },
+                {
+                    "command": "myDevTools.addClassNameProp",
+                    "when": "editorLangId == typescriptreact"
                 }
             ]
         },
