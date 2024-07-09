@@ -130,16 +130,14 @@
             ],
             "commandPalette": [
                 {
-                    "command": "myDevTools.createScssModule",
-                    "title": "Create SCSS Module"
+                    "command": "myDevTools.createScssModule"
                 },
                 {
                     "command": "myDevTools.updatePropsDestructuring",
-                    "title": "Update React Props destructuring"
+                    "when": "editorLangId == typescriptreact"
                 },
                 {
-                    "command": "myDevTools.toggleRealTimePropsUpdate",
-                    "title": "My Dev Tools: Toggle React Real-Time Props Update"
+                    "command": "myDevTools.toggleRealTimePropsUpdate"
                 }
             ]
         },
