@@ -1,6 +1,5 @@
-import dashify from "dashify";
+import _ from "lodash";
 import * as path from "node:path";
-import { pascalCase } from "pascal-case";
 
 export class ControllerName {
     /** Short name without `Controller` */
@@ -11,8 +10,8 @@ export class ControllerName {
     public readonly filePath: string;
 
     public constructor(shortName: string, directoryPath: string) {
-        this.shortName = pascalCase(shortName.replace(/controller$/i, ""));
-        this.slug = dashify(this.shortName);
+        this.shortName = _.upperFirst(_.camelCase(shortName.replace(/controller$/i, "")));
+        this.slug = _.kebabCase(this.shortName);
         this.className = this.shortName + "Controller";
         this.fileName = `${this.slug}.controller.ts`;
         this.filePath = path.join(directoryPath, this.fileName);
