@@ -1,3 +1,4 @@
+import { InterfaceDeclaration, Project, SyntaxKind } from "ts-morph";
 import * as vscode from "vscode";
 
 import { addToExportsInIndex } from "./features/addToExportsInIndex";
@@ -31,23 +32,54 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function activateUpdatePropsDestructuring(context: vscode.ExtensionContext) {
     let timeout: NodeJS.Timeout | undefined;
-    const updatePropsHandler = (document: vscode.TextDocument) => {
+    const project = new Project();
+
+    const updatePropsHandler = (event: vscode.TextDocumentChangeEvent) => {
         const config = vscode.workspace.getConfiguration("myDevTools");
         const enableRealTimeUpdate = config.get<boolean>("enableRealTimePropsUpdate", false);
+        const document = event.document;
 
         if (enableRealTimeUpdate && document.languageId === "typescriptreact") {
-            if (timeout) {
-                clearTimeout(timeout);
+            const activeEditor = vscode.window.activeTextEditor;
+
+            if (!activeEditor || activeEditor.document.uri.toString() !== document.uri.toString()) {
+                return;
             }
-            timeout = setTimeout(async () => {
-                await updatePropsDestructuring(document);
-            }, 350);
+
+            const cursorPosition = activeEditor.selection.active;
+            const offset = document.offsetAt(cursorPosition);
+
+            const sourceFile = project.createSourceFile(document.uri.fsPath, document.getText(), { overwrite: true });
+            const nodeAtPosition = sourceFile.getDescendantAtPos(offset);
+
+            let isInsidePropsInterface = false;
+            let currentNode = nodeAtPosition;
+
+            while (currentNode) {
+                if (currentNode.getKind() === SyntaxKind.InterfaceDeclaration) {
+                    const interfaceDeclaration = currentNode as InterfaceDeclaration;
+                    if (interfaceDeclaration.getName() === "Props") {
+                        isInsidePropsInterface = true;
+                        break;
+                    }
+                }
+                currentNode = currentNode.getParent();
+            }
+
+            if (isInsidePropsInterface) {
+                if (timeout) {
+                    clearTimeout(timeout);
+                }
+                timeout = setTimeout(async () => {
+                    await updatePropsDestructuring(document);
+                }, 350);
+            }
         }
     };
 
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument((event) => {
-            updatePropsHandler(event.document);
+            updatePropsHandler(event);
         })
     );
 
