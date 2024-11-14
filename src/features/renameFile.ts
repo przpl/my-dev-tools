@@ -1,21 +1,21 @@
-import _ from "lodash";
+import { camelCase, kebabCase, pascalCase, snakeCase } from "es-toolkit";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
 export function renameToCamelCase() {
-    renameFile((str) => transformFileName(str, _.camelCase));
+    renameFile((str) => transformFileName(str, camelCase));
 }
 
 export function renameToPascalCase() {
-    renameFile((str) => transformFileName(str, (name) => _.upperFirst(_.camelCase(name))));
+    renameFile((str) => transformFileName(str, pascalCase));
 }
 
 export function renameToSnakeCase() {
-    renameFile((str) => transformFileName(str, _.snakeCase));
+    renameFile((str) => transformFileName(str, snakeCase));
 }
 
 export function renameToKebabCase() {
-    renameFile((str) => transformFileName(str, _.kebabCase));
+    renameFile((str) => transformFileName(str, kebabCase));
 }
 
 function transformFileName(str: string, transformFunc: (str: string) => string): string {

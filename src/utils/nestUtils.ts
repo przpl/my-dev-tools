@@ -1,4 +1,4 @@
-import _ from "lodash";
+import { kebabCase, pascalCase } from "es-toolkit";
 import * as path from "node:path";
 
 export class ControllerName {
@@ -10,8 +10,8 @@ export class ControllerName {
     public readonly filePath: string;
 
     public constructor(shortName: string, directoryPath: string) {
-        this.shortName = _.upperFirst(_.camelCase(shortName.replace(/controller$/i, "")));
-        this.slug = _.kebabCase(this.shortName);
+        this.shortName = pascalCase(shortName.replace(/controller$/i, ""));
+        this.slug = kebabCase(this.shortName);
         this.className = this.shortName + "Controller";
         this.fileName = `${this.slug}.controller.ts`;
         this.filePath = path.join(directoryPath, this.fileName);
