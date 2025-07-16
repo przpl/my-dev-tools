@@ -197,13 +197,19 @@
         "pack": "npm run vscode:prepublish && vsce package",
         "vscode:prepublish": "npm run esbuild-base -- --minify",
         "esbuild-base": "rimraf out && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
-        "publish": "vsce publish"
+        "publish": "vsce publish",
+        "test": "npm run compile-tests && node ./out/test/test/runTest.js",
+        "compile-tests": "tsc -p ./src/test/tsconfig.json",
+        "pretest": "npm run compile-tests"
     },
     "devDependencies": {
+        "@types/mocha": "^10.0.6",
         "@types/node": "^20.17.6",
         "@types/vscode": "^1.75.1",
+        "@vscode/test-electron": "^2.3.9",
         "@vscode/vsce": "^3.6.0",
         "esbuild": "^0.25.6",
+        "mocha": "^10.4.0",
         "rimraf": "^6.0.1",
         "typescript": "^5.8.3"
     },
