@@ -58,7 +58,7 @@
             },
             {
                 "command": "myDevTools.toggleRealTimePropsUpdate",
-                "title": "My Dev Tools: Toggle React Real-Time Props Update"
+                "title": "Toggle React Real-Time Props Update"
             },
             {
                 "command": "myDevTools.addClassNameProp",

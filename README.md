@@ -29,7 +29,7 @@ This feature helps keep your React component props up-to-date with their interfa
 
 -   Can be manually triggered using the "Update React Props destructuring" command in the command palette.
 -   Automatic real-time updates are disabled by default but can be enabled in settings.
--   Real-time updates can be toggled on/off using the "My Dev Tools: Toggle React Real-Time Props Update" command.
+-   Real-time updates can be toggled on/off using the "Toggle React Real-Time Props Update" command.
 -   Configuration: Set `myDevTools.enableRealTimePropsUpdate` to `true` or `false` (default) in your VS Code settings.
 
 To enable real-time updates:
