@@ -11,7 +11,7 @@
         "url": "https://github.com/przpl/my-dev-tools"
     },
     "engines": {
-        "vscode": "^1.75.0"
+        "vscode": "^1.100.0"
     },
     "categories": [
         "Other",
@@ -236,18 +236,18 @@
         "pretest": "npm run compile-tests"
     },
     "devDependencies": {
-        "@types/mocha": "^10.0.6",
+        "@types/mocha": "^10.0.10",
         "@types/node": "^20.17.6",
-        "@types/vscode": "^1.75.1",
-        "@vscode/test-electron": "^2.3.9",
+        "@types/vscode": "^1.100.1",
+        "@vscode/test-electron": "^2.5.2",
         "@vscode/vsce": "^3.6.0",
-        "esbuild": "^0.25.6",
-        "mocha": "^10.4.0",
+        "esbuild": "^0.25.8",
+        "mocha": "^11.7.1",
         "rimraf": "^6.0.1",
         "typescript": "^5.8.3"
     },
     "dependencies": {
-        "es-toolkit": "^1.39.7",
+        "es-toolkit": "^1.39.8",
         "ts-morph": "^26.0.0"
     }
 }
