@@ -7,7 +7,7 @@ export async function updatePropsDestructuring(document: vscode.TextDocument) {
     const text = document.getText();
 
     if (!project) {
-        project = new Project();
+        project = new Project({ useInMemoryFileSystem: true });
     }
 
     const sourceFile = project.createSourceFile("temp.tsx", text, { overwrite: true });

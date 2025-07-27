@@ -33,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function activateUpdatePropsDestructuring(context: vscode.ExtensionContext) {
     let timeout: NodeJS.Timeout | undefined;
-    const project = new Project();
+    const project = new Project({ useInMemoryFileSystem: true });
 
     const updatePropsHandler = (event: vscode.TextDocumentChangeEvent) => {
         const config = vscode.workspace.getConfiguration("myDevTools");

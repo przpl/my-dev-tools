@@ -11,7 +11,7 @@ export async function addPropsToComponent() {
     const document = editor.document;
     const text = document.getText();
 
-    const project = new Project();
+    const project = new Project({ useInMemoryFileSystem: true });
     const sourceFile = project.createSourceFile("temp.tsx", text, { overwrite: true });
 
     const componentFunction = sourceFile.getFirstDescendant(
