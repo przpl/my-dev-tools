@@ -36,6 +36,23 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Enable real-time updates for React Props destructuring"
+                },
+                "myDevTools.autoRenameStrategy": {
+                    "type": "string",
+                    "default": "kebab-case",
+                    "enum": [
+                        "camelCase",
+                        "PascalCase",
+                        "snake_case",
+                        "kebab-case"
+                    ],
+                    "enumDescriptions": [
+                        "Convert to camelCase",
+                        "Convert to PascalCase",
+                        "Convert to snake_case",
+                        "Convert to kebab-case"
+                    ],
+                    "description": "Naming strategy to use when auto-renaming files based on exported symbols"
                 }
             }
         },
@@ -91,6 +108,10 @@
             {
                 "command": "myDevTools.renameToKebabCase",
                 "title": "Rename to kebab-case"
+            },
+            {
+                "command": "myDevTools.autoRename",
+                "title": "Auto rename file"
             }
         ],
         "menus": {
@@ -134,6 +155,10 @@
                 {
                     "command": "myDevTools.renameToKebabCase",
                     "group": "rename"
+                },
+                {
+                    "command": "myDevTools.autoRename",
+                    "group": "rename"
                 }
             ],
             "commandPalette": [
@@ -154,6 +179,10 @@
                 {
                     "command": "myDevTools.addPropsToComponent",
                     "when": "editorLangId == typescriptreact"
+                },
+                {
+                    "command": "myDevTools.autoRename",
+                    "when": "editorLangId == typescript || editorLangId == typescriptreact"
                 }
             ]
         },
@@ -186,6 +215,10 @@
                     },
                     {
                         "command": "myDevTools.renameToKebabCase",
+                        "group": "rename"
+                    },
+                    {
+                        "command": "myDevTools.autoRename",
                         "group": "rename"
                     }
                 ]

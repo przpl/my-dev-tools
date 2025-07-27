@@ -8,7 +8,7 @@ import { addClassNameProp } from "./features/react/addClassNameProp";
 import { addPropsToComponent } from "./features/react/addPropsToComponent";
 import { createScssModule } from "./features/react/createScssModule";
 import { updatePropsDestructuring } from "./features/react/updatePropsDestructuring";
-import { renameToCamelCase, renameToKebabCase, renameToPascalCase, renameToSnakeCase } from "./features/renameFile";
+import { autoRename, renameToCamelCase, renameToKebabCase, renameToPascalCase, renameToSnakeCase } from "./features/renameFile";
 
 export function activate(context: vscode.ExtensionContext) {
     // Generic
@@ -18,6 +18,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.renameToPascalCase", renameToPascalCase));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.renameToSnakeCase", renameToSnakeCase));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.renameToKebabCase", renameToKebabCase));
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.autoRename", autoRename));
 
     // React
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.createScssModule", createScssModule));

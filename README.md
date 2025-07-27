@@ -8,11 +8,29 @@ If there is a larger group of common functions in the extension then this will b
 
 ## General
 
-| Option                     | Available in      | Description                                                                                                               |
-| -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Go to nearest index.ts     | Command palette   | Open nearest index.ts file in one of the parent folders.                                                                  |
-| Add to exports in index.ts | Command palette   | Add selected symbol to exports in nearest index.ts. If no symbol is selected then everything will be exported (export \*) |
-| Rename to...               | File context menu | Rename file to camelCase, PascalCase, snake_case or kebab-case.                                                           |
+| Option                     | Available in                        | Description                                                                                                                |
+| -------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Go to nearest index.ts     | Command palette                     | Open nearest index.ts file in one of the parent folders.                                                                   |
+| Add to exports in index.ts | Command palette                     | Add selected symbol to exports in nearest index.ts. If no symbol is selected then everything will be exported (export \*)  |
+| Rename to...               | File context menu / Command palette | Rename file to camelCase, PascalCase, snake_case or kebab-case.                                                            |
+| Auto rename                | File context menu / Command palette | Automatically rename file based on exported symbols (class, function, interface, etc.). Uses configurable naming strategy. |
+
+### Auto Rename
+
+The Auto rename feature intelligently renames files based on their exported symbols:
+
+**Configuration:**
+Set `myDevTools.autoRenameStrategy` in your VS Code settings:
+
+1. Open VS Code settings (File > Preferences > Settings)
+2. Search for "My Dev Tools"
+3. Select your preferred "Auto Rename Strategy" from the dropdown
+
+Or add this to your `settings.json`:
+
+```json
+"myDevTools.autoRenameStrategy": "kebab-case"
+```
 
 ## React
 
