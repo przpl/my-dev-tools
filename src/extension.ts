@@ -6,6 +6,7 @@ import { createNestJsController } from "./features/nestjs/createNestJsController
 import { openNearestFile } from "./features/openNearestFile";
 import { addClassNameProp } from "./features/react/addClassNameProp";
 import { addPropsToComponent } from "./features/react/addPropsToComponent";
+import { addUndefinedPropsToInterface } from "./features/react/addUndefinedPropsToInterface";
 import { createScssModule } from "./features/react/createScssModule";
 import { updatePropsDestructuring } from "./features/react/updatePropsDestructuring";
 import { autoRename, renameToCamelCase, renameToKebabCase, renameToPascalCase, renameToSnakeCase } from "./features/renameFile";
@@ -25,6 +26,7 @@ export function activate(context: vscode.ExtensionContext) {
     activateUpdatePropsDestructuring(context);
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.addClassNameProp", addClassNameProp));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.addPropsToComponent", addPropsToComponent));
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.addUndefinedPropsToInterface", addUndefinedPropsToInterface));
 
     // NestJS
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.createNestJSController", createNestJsController));

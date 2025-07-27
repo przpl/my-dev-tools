@@ -40,6 +40,7 @@ Or add this to your `settings.json`:
 | Update Props Destructuring         | Automatic / Command palette | Updates the props destructuring object in React components to match the Props interface. Can be triggered manually or automatically.  |
 | Add className prop                 | Command palette             | Adds a className prop to a React component, including updating the Props interface and component usage.                               |
 | Add empty props to React component | Command palette             | Adds an empty Props interface to a React component that doesn't have any props.                                                       |
+| Add undefined props to interface   | Command palette             | Detects undefined symbols used in JSX and adds them to the Props interface with smart type guessing.                                  |
 
 ### Update Props Destructuring
 
