@@ -4,7 +4,6 @@ import * as vscode from "vscode";
 import { addToExportsInIndex } from "./features/addToExportsInIndex";
 import { createNestJsController } from "./features/nestjs/createNestJsController";
 import { openNearestFile } from "./features/openNearestFile";
-import { addClassNameProp } from "./features/react/addClassNameProp";
 import { addPropsToComponent } from "./features/react/addPropsToComponent";
 import { addUndefinedPropsToInterface } from "./features/react/addUndefinedPropsToInterface";
 import { createScssModule } from "./features/react/createScssModule";
@@ -24,7 +23,6 @@ export function activate(context: vscode.ExtensionContext) {
     // React
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.createScssModule", createScssModule));
     activateUpdatePropsDestructuring(context);
-    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.addClassNameProp", addClassNameProp));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.addPropsToComponent", addPropsToComponent));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.addUndefinedPropsToInterface", addUndefinedPropsToInterface));
 

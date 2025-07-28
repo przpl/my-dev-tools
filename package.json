@@ -78,10 +78,6 @@
                 "title": "Toggle React Real-Time Props Update"
             },
             {
-                "command": "myDevTools.addClassNameProp",
-                "title": "Add className to React component and its props"
-            },
-            {
                 "command": "myDevTools.addPropsToComponent",
                 "title": "Add empty props to React component"
             },
@@ -175,10 +171,6 @@
                 },
                 {
                     "command": "myDevTools.toggleRealTimePropsUpdate"
-                },
-                {
-                    "command": "myDevTools.addClassNameProp",
-                    "when": "editorLangId == typescriptreact"
                 },
                 {
                     "command": "myDevTools.addPropsToComponent",
