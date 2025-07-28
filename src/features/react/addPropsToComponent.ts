@@ -1,59 +1,39 @@
-import { FunctionDeclaration, Node, Project } from "ts-morph";
 import * as vscode from "vscode";
+import { ReactUtils } from "../../utils/reactUtils";
+import { VsCodeUtils } from "../../utils/vsCodeUtils";
 
 export async function addPropsToComponent() {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-        vscode.window.showErrorMessage("No active editor");
+    const context = ReactUtils.setupWorkspaceContext();
+    if (!context) {
         return;
     }
 
-    const document = editor.document;
-    const text = document.getText();
-
-    const project = new Project({ useInMemoryFileSystem: true });
-    const sourceFile = project.createSourceFile("temp.tsx", text, { overwrite: true });
-
-    const componentFunction = sourceFile.getFirstDescendant(
-        (node): node is FunctionDeclaration => Node.isFunctionDeclaration(node) || Node.isArrowFunction(node)
-    );
-
+    const componentFunction = ReactUtils.findReactComponent(context.sourceFile);
     if (!componentFunction) {
-        vscode.window.showErrorMessage("No React component found");
+        vscode.window.showErrorMessage(ReactUtils.ErrorMessages.NO_REACT_COMPONENT);
         return;
     }
 
-    const parameterList = componentFunction.getParameters();
-    if (parameterList.length > 0) {
+    if (ReactUtils.componentHasProps(componentFunction)) {
         vscode.window.showErrorMessage("Component already has props");
         return;
     }
 
     // Add empty Props interface
-    const propsInterface = sourceFile.insertInterface(componentFunction.getChildIndex(), {
-        name: "Props",
-        isExported: false,
-    });
+    const propsInterface = ReactUtils.findOrCreatePropsInterface(context.sourceFile, componentFunction);
 
-    // Update component function
+    // Add parameter to component function
     componentFunction.addParameter({
         name: "{ }",
-        type: "Props",
+        type: propsInterface.getName(),
     });
 
-    const updatedText = sourceFile.getFullText();
-    const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
-
-    const edit = new vscode.WorkspaceEdit();
-    edit.replace(document.uri, fullRange, updatedText);
-
-    await vscode.workspace.applyEdit(edit);
+    const updatedText = context.sourceFile.getFullText();
+    await VsCodeUtils.applyChangesToWorkspace(context, updatedText);
 
     // Place cursor inside Props interface
     const propsInterfacePos = propsInterface.getPos() + "interface Props {".length;
-    const cursorPosition = document.positionAt(propsInterfacePos);
-    editor.selection = new vscode.Selection(cursorPosition, cursorPosition);
-    editor.revealRange(new vscode.Range(cursorPosition, cursorPosition));
+    VsCodeUtils.moveCursorToPosition(context.editor, context.document, propsInterfacePos);
 
     vscode.window.showInformationMessage("Empty Props interface added successfully");
 }

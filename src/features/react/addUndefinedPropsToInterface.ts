@@ -1,5 +1,7 @@
-import { ArrowFunction, BindingElement, FunctionDeclaration, InterfaceDeclaration, Node, Project, SourceFile, SyntaxKind } from "ts-morph";
+import { ArrowFunction, BindingElement, FunctionDeclaration, Node, SyntaxKind } from "ts-morph";
 import * as vscode from "vscode";
+import { ReactUtils } from "../../utils/reactUtils";
+import { VsCodeUtils } from "../../utils/vsCodeUtils";
 import { updatePropsDestructuring } from "./updatePropsDestructuring";
 
 interface UndefinedProp {
@@ -53,27 +55,20 @@ const typeGuesses = new Map<string, string>([
 ]);
 
 export async function addUndefinedPropsToInterface() {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-        vscode.window.showErrorMessage("No active editor");
+    const context = ReactUtils.setupWorkspaceContext();
+    if (!context) {
         return;
     }
 
-    const document = editor.document;
-    const text = document.getText();
-
-    const project = new Project({ useInMemoryFileSystem: true });
-    const sourceFile = project.createSourceFile("temp.tsx", text, { overwrite: true });
-
     // Find React component function
-    const componentFunction = findReactComponent(sourceFile);
+    const componentFunction = ReactUtils.findReactComponent(context.sourceFile);
     if (!componentFunction) {
-        vscode.window.showErrorMessage("No React component found");
+        vscode.window.showErrorMessage(ReactUtils.ErrorMessages.NO_REACT_COMPONENT);
         return;
     }
 
     // Find or create Props interface
-    let propsInterface = findPropsInterface(sourceFile, componentFunction);
+    let propsInterface = ReactUtils.findPropsInterface(context.sourceFile, componentFunction);
     let propsInterfaceName = "Props";
 
     if (!propsInterface) {
@@ -81,18 +76,15 @@ export async function addUndefinedPropsToInterface() {
         const existingParameter = componentFunction.getParameters()[0];
         if (existingParameter) {
             const typeNode = existingParameter.getTypeNode();
-            if (typeNode && Node.isTypeReference(typeNode)) {
-                propsInterfaceName = typeNode.getTypeName().getText();
+            if (typeNode && typeNode.getKind() === SyntaxKind.TypeReference) {
+                propsInterfaceName = typeNode.getText();
             }
         }
 
-        propsInterface = sourceFile.insertInterface(componentFunction.getChildIndex(), {
-            name: propsInterfaceName,
-            isExported: false,
-        });
+        propsInterface = ReactUtils.findOrCreatePropsInterface(context.sourceFile, componentFunction, propsInterfaceName);
 
         // Update component function parameter if it doesn't exist
-        if (componentFunction.getParameters().length === 0) {
+        if (!ReactUtils.componentHasProps(componentFunction)) {
             componentFunction.addParameter({
                 name: "{ }",
                 type: propsInterfaceName,
@@ -128,71 +120,19 @@ export async function addUndefinedPropsToInterface() {
         componentFunction.getParameters()[0].getFirstChildByKind(SyntaxKind.ObjectBindingPattern) !== undefined;
 
     // Apply changes
-    const updatedText = sourceFile.getFullText();
-    const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
-
-    const edit = new vscode.WorkspaceEdit();
-    edit.replace(document.uri, fullRange, updatedText);
-
-    await vscode.workspace.applyEdit(edit);
+    const updatedText = context.sourceFile.getFullText();
+    await VsCodeUtils.applyChangesToWorkspace(context, updatedText);
 
     // If props are destructured, run updatePropsDestructuring command
     if (hasDestructuredProps) {
-        await updatePropsDestructuring(document);
+        await updatePropsDestructuring(context.document);
     }
 
     // Move cursor to Props interface
     const propsStart = propsInterface.getStart();
-    const propsPosition = document.positionAt(propsStart);
-    editor.selection = new vscode.Selection(propsPosition, propsPosition);
-    editor.revealRange(new vscode.Range(propsPosition, propsPosition));
+    VsCodeUtils.moveCursorToPosition(context.editor, context.document, propsStart);
 
     vscode.window.showInformationMessage(`Added ${undefinedProps.length} props to ${propsInterfaceName}`);
-}
-
-function findReactComponent(sourceFile: SourceFile): FunctionDeclaration | ArrowFunction | undefined {
-    // Look for function declarations or arrow functions that return JSX
-    const functions = sourceFile.getDescendantsOfKind(SyntaxKind.FunctionDeclaration);
-    const arrowFunctions = sourceFile.getDescendantsOfKind(SyntaxKind.ArrowFunction);
-
-    const allFunctions = [...functions, ...arrowFunctions];
-
-    for (const func of allFunctions) {
-        if (hasJsxReturn(func)) {
-            return func;
-        }
-    }
-
-    return undefined;
-}
-
-function hasJsxReturn(func: any): boolean {
-    // Check if function contains JSX elements
-    const jsxElements = func.getDescendantsOfKind(SyntaxKind.JsxElement);
-    const jsxSelfClosing = func.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement);
-    const jsxFragments = func.getDescendantsOfKind(SyntaxKind.JsxFragment);
-
-    return jsxElements.length > 0 || jsxSelfClosing.length > 0 || jsxFragments.length > 0;
-}
-
-function findPropsInterface(
-    sourceFile: SourceFile,
-    componentFunction: FunctionDeclaration | ArrowFunction
-): InterfaceDeclaration | undefined {
-    // First, check if component function has a typed parameter
-    const parameters = componentFunction.getParameters();
-    if (parameters.length > 0) {
-        const typeNode = parameters[0].getTypeNode();
-        if (typeNode && Node.isTypeReference(typeNode)) {
-            const typeName = typeNode.getTypeName().getText();
-            const interfaces = sourceFile.getDescendantsOfKind(SyntaxKind.InterfaceDeclaration);
-            return interfaces.find((iface: InterfaceDeclaration) => iface.getName() === typeName);
-        }
-    }
-
-    // If no typed parameter, look for interfaces ending with "Props"
-    const interfaces = sourceFile.getDescendantsOfKind(SyntaxKind.InterfaceDeclaration);
-    return interfaces.find((iface: InterfaceDeclaration) => iface.getName()?.endsWith("Props"));
 }
 
 function findUndefinedPropsInComponent(
