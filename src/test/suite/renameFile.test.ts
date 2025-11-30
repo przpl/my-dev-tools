@@ -5,6 +5,31 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { autoRename } from "../../features/renameFile";
 
+/**
+ * Extracts the target filename from a WorkspaceEdit rename operation.
+ * Accesses the internal structure to find rename file operations.
+ */
+function extractRenameTargetFilename(edit: vscode.WorkspaceEdit): string | undefined {
+    const editAny = edit as any;
+    
+    // The internal structure uses minified property 'a' for the edits array
+    const edits = editAny.a || editAny._edits;
+    
+    if (edits && Array.isArray(edits)) {
+        for (const operation of edits) {
+            // Rename operations have 'to' property with the target URI
+            // The 'to' property has a 'path' with the file path
+            if (operation.to && operation.to.path) {
+                // Extract filename from the path (format: /c:/path/to/file.ts)
+                const filePath = operation.to.path;
+                return path.basename(filePath);
+            }
+        }
+    }
+    
+    return undefined;
+}
+
 suite("RenameFile Tests", () => {
     let testEditor: vscode.TextEditor;
     let originalActiveTextEditor: vscode.TextEditor | undefined;
@@ -120,14 +145,10 @@ let privateVariable = "also not exported";`;
         await createTestFile(codeWithSingleExport, "old-name.ts");
 
         // Mock workspace.applyEdit to capture the rename operation
-        let renameSuccessful = false;
-        let newFileName = "";
+        let capturedNewFileName: string | undefined;
         const originalApplyEdit = vscode.workspace.applyEdit;
         vscode.workspace.applyEdit = async (edit: vscode.WorkspaceEdit) => {
-            // For file rename operations, we simply assume success if applyEdit is called
-            // The actual rename logic validation should be tested separately
-            renameSuccessful = true;
-            newFileName = "my-test-function.ts"; // Expected result for kebab-case
+            capturedNewFileName = extractRenameTargetFilename(edit);
             return true;
         };
 
@@ -136,8 +157,8 @@ let privateVariable = "also not exported";`;
         // Restore original method
         vscode.workspace.applyEdit = originalApplyEdit;
 
-        assert.ok(renameSuccessful, "Should perform rename operation");
-        assert.strictEqual(newFileName, "my-test-function.ts", "Should rename to kebab-case");
+        assert.ok(capturedNewFileName, "Should perform rename operation");
+        assert.strictEqual(capturedNewFileName, "my-test-function.ts", "Should rename to kebab-case");
     });
 
     test("should show quick pick for multiple exports and sort correctly", async () => {
@@ -168,12 +189,10 @@ export interface UserData {
             return resolvedItems[0];
         };
 
-        let renameSuccessful = false;
-        let newFileName = "";
+        let capturedNewFileName: string | undefined;
         const originalApplyEdit = vscode.workspace.applyEdit;
         vscode.workspace.applyEdit = async (edit: vscode.WorkspaceEdit) => {
-            renameSuccessful = true;
-            newFileName = "user-service.ts"; // Expected result for kebab-case based on selected class
+            capturedNewFileName = extractRenameTargetFilename(edit);
             return true;
         };
 
@@ -195,8 +214,8 @@ export interface UserData {
         assert.strictEqual(quickPickItems[2].description, "interface", "Should show interface type");
 
         // Verify rename operation
-        assert.ok(renameSuccessful, "Should perform rename operation");
-        assert.strictEqual(newFileName, "user-service.ts", "Should rename to kebab-case based on selected class");
+        assert.ok(capturedNewFileName, "Should perform rename operation");
+        assert.strictEqual(capturedNewFileName, "user-service.ts", "Should rename to kebab-case based on selected class");
     });
 
     test("should use camelCase when configured", async () => {
@@ -222,12 +241,10 @@ export interface UserData {
 
         await createTestFile(codeWithExport, "old-name.ts");
 
-        let renameSuccessful = false;
-        let newFileName = "";
+        let capturedNewFileName: string | undefined;
         const originalApplyEdit = vscode.workspace.applyEdit;
         vscode.workspace.applyEdit = async (edit: vscode.WorkspaceEdit) => {
-            renameSuccessful = true;
-            newFileName = "myTestClass.ts"; // Expected result for camelCase
+            capturedNewFileName = extractRenameTargetFilename(edit);
             return true;
         };
 
@@ -236,8 +253,8 @@ export interface UserData {
         // Restore original method
         vscode.workspace.applyEdit = originalApplyEdit;
 
-        assert.ok(renameSuccessful, "Should perform rename operation");
-        assert.strictEqual(newFileName, "myTestClass.ts", "Should rename to camelCase");
+        assert.ok(capturedNewFileName, "Should perform rename operation");
+        assert.strictEqual(capturedNewFileName, "myTestClass.ts", "Should rename to camelCase");
     });
 
     test("should show info message when file name already matches", async () => {
@@ -317,5 +334,139 @@ export class MyClass {
         assert.strictEqual(quickPickItems[3].description, "type", "Type should be fourth");
         assert.strictEqual(quickPickItems[4].description, "enum", "Enum should be fifth");
         assert.strictEqual(quickPickItems[5].description, "variable", "Variable should be sixth");
+    });
+
+    test("should use PascalCase when configured", async () => {
+        // Override the mock configuration for this specific test
+        vscode.workspace.getConfiguration = (section?: string) => {
+            const mockConfig = {
+                get: <T>(key: string, defaultValue?: T): T => {
+                    if (key === "autoRenameStrategy") {
+                        return "PascalCase" as T;
+                    }
+                    return defaultValue as T;
+                },
+                update: async () => true,
+                has: () => true,
+                inspect: () => undefined,
+            };
+            return mockConfig as any;
+        };
+
+        const codeWithExport = `export function getUserData() {
+    return {};
+}`;
+
+        await createTestFile(codeWithExport, "old-name.ts");
+
+        let capturedNewFileName: string | undefined;
+        const originalApplyEdit = vscode.workspace.applyEdit;
+        vscode.workspace.applyEdit = async (edit: vscode.WorkspaceEdit) => {
+            capturedNewFileName = extractRenameTargetFilename(edit);
+            return true;
+        };
+
+        await autoRename();
+
+        // Restore original method
+        vscode.workspace.applyEdit = originalApplyEdit;
+
+        assert.ok(capturedNewFileName, "Should perform rename operation");
+        assert.strictEqual(capturedNewFileName, "GetUserData.ts", "Should rename to PascalCase");
+    });
+
+    test("should use snake_case when configured", async () => {
+        // Override the mock configuration for this specific test
+        vscode.workspace.getConfiguration = (section?: string) => {
+            const mockConfig = {
+                get: <T>(key: string, defaultValue?: T): T => {
+                    if (key === "autoRenameStrategy") {
+                        return "snake_case" as T;
+                    }
+                    return defaultValue as T;
+                },
+                update: async () => true,
+                has: () => true,
+                inspect: () => undefined,
+            };
+            return mockConfig as any;
+        };
+
+        const codeWithExport = `export class UserProfileService {
+    getProfile() {}
+}`;
+
+        await createTestFile(codeWithExport, "old-name.ts");
+
+        let capturedNewFileName: string | undefined;
+        const originalApplyEdit = vscode.workspace.applyEdit;
+        vscode.workspace.applyEdit = async (edit: vscode.WorkspaceEdit) => {
+            capturedNewFileName = extractRenameTargetFilename(edit);
+            return true;
+        };
+
+        await autoRename();
+
+        // Restore original method
+        vscode.workspace.applyEdit = originalApplyEdit;
+
+        assert.ok(capturedNewFileName, "Should perform rename operation");
+        assert.strictEqual(capturedNewFileName, "user_profile_service.ts", "Should rename to snake_case");
+    });
+
+    test("should handle re-exported symbols", async () => {
+        const codeWithReExport = `export { useState } from 'react';
+
+export function useCustomHook() {
+    return {};
+}`;
+
+        await createTestFile(codeWithReExport, "hooks.ts");
+
+        let quickPickItems: vscode.QuickPickItem[] = [];
+        const originalShowQuickPick = vscode.window.showQuickPick;
+        vscode.window.showQuickPick = async <T extends vscode.QuickPickItem>(
+            items: readonly T[] | Thenable<readonly T[]>,
+            options?: vscode.QuickPickOptions
+        ): Promise<T | undefined> => {
+            const resolvedItems = await Promise.resolve(items);
+            quickPickItems = [...resolvedItems] as vscode.QuickPickItem[];
+            return undefined; // User cancels
+        };
+
+        await autoRename();
+
+        // Restore original method
+        vscode.window.showQuickPick = originalShowQuickPick;
+
+        // Should include both exported symbols
+        assert.ok(quickPickItems.length >= 1, "Should show exported symbols");
+        assert.ok(
+            quickPickItems.some((item) => item.label === "useCustomHook"),
+            "Should include useCustomHook in options"
+        );
+    });
+
+    test("should handle exported arrow function as variable", async () => {
+        const codeWithArrowFunction = `export const fetchUserData = async () => {
+    return await fetch('/api/user');
+};`;
+
+        await createTestFile(codeWithArrowFunction, "api-utils.ts");
+
+        let capturedNewFileName: string | undefined;
+        const originalApplyEdit = vscode.workspace.applyEdit;
+        vscode.workspace.applyEdit = async (edit: vscode.WorkspaceEdit) => {
+            capturedNewFileName = extractRenameTargetFilename(edit);
+            return true;
+        };
+
+        await autoRename();
+
+        // Restore original method
+        vscode.workspace.applyEdit = originalApplyEdit;
+
+        assert.ok(capturedNewFileName, "Should perform rename operation for exported arrow function");
+        assert.strictEqual(capturedNewFileName, "fetch-user-data.ts", "Should rename to kebab-case based on arrow function name");
     });
 });

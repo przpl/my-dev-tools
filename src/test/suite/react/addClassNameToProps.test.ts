@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { addClassNameToProps } from "../../features/react/addClassNameToProps";
+import { addClassNameToProps } from "../../../features/react/addClassNameToProps";
 
 suite("AddClassNameToProps Tests", () => {
     let testDocument: vscode.TextDocument;
@@ -156,5 +156,70 @@ function MyComponent(props: Props) {
 
         assert.ok(updatedContent.includes("className?: string"), "Should add className property");
         assert.ok(updatedContent.includes("(props: Props)"), "Should not modify non-destructured props parameter");
+    });
+
+    test("should work with empty destructuring pattern", async () => {
+        const initialCode = `interface Props {
+}
+
+function MyComponent({ }: Props) {
+    return <div>Empty</div>;
+}`;
+
+        await testEditor.edit((editBuilder) => {
+            editBuilder.insert(new vscode.Position(0, 0), initialCode);
+        });
+
+        await addClassNameToProps();
+        const updatedContent = testDocument.getText();
+
+        assert.ok(updatedContent.includes("className?: string"), "Should add className property");
+        assert.ok(updatedContent.includes("{ className }"), "Should update empty destructuring to include className");
+    });
+
+    test("should handle component with multiple interfaces", async () => {
+        const initialCode = `interface OtherInterface {
+    id: string;
+}
+
+interface Props {
+    name: string;
+}
+
+function MyComponent({ name }: Props) {
+    return <div>{name}</div>;
+}`;
+
+        await testEditor.edit((editBuilder) => {
+            editBuilder.insert(new vscode.Position(0, 0), initialCode);
+        });
+
+        await addClassNameToProps();
+        const updatedContent = testDocument.getText();
+
+        // Should only add className to Props, not OtherInterface
+        assert.ok(updatedContent.includes("className?: string"), "Should add className to Props interface");
+        // OtherInterface should not have className
+        const otherInterfaceMatch = updatedContent.match(/interface OtherInterface \{[^}]*\}/s);
+        assert.ok(otherInterfaceMatch && !otherInterfaceMatch[0].includes("className"), "Should not modify OtherInterface");
+    });
+
+    test("should work with arrow function returning JSX fragment", async () => {
+        const initialCode = `interface Props {
+    items: string[];
+}
+
+const MyComponent = ({ items }: Props) => {
+    return <>{items.map(i => <span key={i}>{i}</span>)}</>;
+};`;
+
+        await testEditor.edit((editBuilder) => {
+            editBuilder.insert(new vscode.Position(0, 0), initialCode);
+        });
+
+        await addClassNameToProps();
+        const updatedContent = testDocument.getText();
+
+        assert.ok(updatedContent.includes("className?: string"), "Should add className property to fragment component");
     });
 });

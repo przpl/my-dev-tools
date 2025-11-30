@@ -1,8 +1,7 @@
 import { ArrowFunction, BindingElement, FunctionDeclaration, Node, SyntaxKind } from "ts-morph";
 import * as vscode from "vscode";
+
 import { ReactUtils } from "../../utils/reactUtils";
-import { VsCodeUtils } from "../../utils/vsCodeUtils";
-import { updatePropsDestructuring } from "./updatePropsDestructuring";
 
 interface UndefinedProp {
     name: string;
@@ -10,6 +9,7 @@ interface UndefinedProp {
 }
 
 const typeGuesses = new Map<string, string>([
+    // String types
     ["className", "string"],
     ["title", "string"],
     ["name", "string"],
@@ -26,6 +26,12 @@ const typeGuesses = new Map<string, string>([
     ["href", "string"],
     ["type", "string"],
     ["role", "string"],
+    ["variant", "string"],
+    ["color", "string"],
+    ["testId", "string"],
+    ["ariaLabel", "string"],
+
+    // Number types
     ["count", "number"],
     ["length", "number"],
     ["width", "number"],
@@ -36,6 +42,8 @@ const typeGuesses = new Map<string, string>([
     ["min", "number"],
     ["step", "number"],
     ["tabIndex", "number"],
+
+    // Boolean types
     ["isVisible", "boolean"],
     ["isOpen", "boolean"],
     ["isDisabled", "boolean"],
@@ -52,87 +60,44 @@ const typeGuesses = new Map<string, string>([
     ["open", "boolean"],
     ["active", "boolean"],
     ["selected", "boolean"],
+
+    // React-specific types
+    ["children", "React.ReactNode"],
+    ["style", "React.CSSProperties"],
+
+    // Event handlers
+    ["onClick", "() => void"],
 ]);
 
 export async function addUndefinedPropsToInterface() {
-    const context = ReactUtils.setupWorkspaceContext();
-    if (!context) {
-        return;
-    }
+    await ReactUtils.withPropsInterface(async (ctx) => {
+        const { componentFunction, propsInterface, propsInterfaceName } = ctx;
 
-    // Find React component function
-    const componentFunction = ReactUtils.findReactComponent(context.sourceFile);
-    if (!componentFunction) {
-        vscode.window.showErrorMessage(ReactUtils.ErrorMessages.NO_REACT_COMPONENT);
-        return;
-    }
+        // Get existing props from the interface
+        const existingProps = new Set(propsInterface.getProperties().map((p) => p.getName()));
 
-    // Find or create Props interface
-    let propsInterface = ReactUtils.findPropsInterface(context.sourceFile, componentFunction);
-    let propsInterfaceName = "Props";
+        // Find undefined symbols used in the component
+        const undefinedProps = findUndefinedPropsInComponent(componentFunction, existingProps);
 
-    if (!propsInterface) {
-        // If no Props interface exists, determine the name and create it
-        const existingParameter = componentFunction.getParameters()[0];
-        if (existingParameter) {
-            const typeNode = existingParameter.getTypeNode();
-            if (typeNode && typeNode.getKind() === SyntaxKind.TypeReference) {
-                propsInterfaceName = typeNode.getText();
-            }
+        if (undefinedProps.length === 0) {
+            vscode.window.showInformationMessage("No undefined props found in the component");
+            return;
         }
 
-        propsInterface = ReactUtils.findOrCreatePropsInterface(context.sourceFile, componentFunction, propsInterfaceName);
-
-        // Update component function parameter if it doesn't exist
-        if (!ReactUtils.componentHasProps(componentFunction)) {
-            componentFunction.addParameter({
-                name: "{ }",
-                type: propsInterfaceName,
+        // Add undefined props to the interface
+        undefinedProps.forEach((prop) => {
+            propsInterface.addProperty({
+                name: prop.name,
+                type: prop.type,
+                hasQuestionToken: false, // Make props required (not optional)
             });
-        }
-    } else {
-        propsInterfaceName = propsInterface.getName() || "Props";
-    }
-
-    // Get existing props from the interface
-    const existingProps = new Set(propsInterface.getProperties().map((p) => p.getName()));
-
-    // Find undefined symbols used in the component
-    const undefinedProps = findUndefinedPropsInComponent(componentFunction, existingProps);
-
-    if (undefinedProps.length === 0) {
-        vscode.window.showInformationMessage("No undefined props found in the component");
-        return;
-    }
-
-    // Add undefined props to the interface
-    undefinedProps.forEach((prop) => {
-        propsInterface!.addProperty({
-            name: prop.name,
-            type: prop.type,
-            hasQuestionToken: false, // Make props required (not optional)
         });
+
+        // Apply changes and update destructuring
+        await ReactUtils.applyPropsChanges(ctx);
+
+        vscode.window.showInformationMessage(`Added ${undefinedProps.length} props to ${propsInterfaceName}`);
     });
-
-    // Check if props are destructured
-    const hasDestructuredProps =
-        componentFunction.getParameters().length > 0 &&
-        componentFunction.getParameters()[0].getFirstChildByKind(SyntaxKind.ObjectBindingPattern) !== undefined;
-
-    // Apply changes
-    const updatedText = context.sourceFile.getFullText();
-    await VsCodeUtils.applyChangesToWorkspace(context, updatedText);
-
-    // If props are destructured, run updatePropsDestructuring command
-    if (hasDestructuredProps) {
-        await updatePropsDestructuring(context.document);
-    }
-
-    // Move cursor to Props interface
-    const propsStart = propsInterface.getStart();
-    VsCodeUtils.moveCursorToPosition(context.editor, context.document, propsStart);
-
-    vscode.window.showInformationMessage(`Added ${undefinedProps.length} props to ${propsInterfaceName}`);
 }
 
 function findUndefinedPropsInComponent(
@@ -146,6 +111,7 @@ function findUndefinedPropsInComponent(
     const parameters = componentFunction.getParameters();
     const destructuredProps = new Set<string>();
     const parameterNames = new Set<string>();
+    let propsParamName: string | undefined;
 
     if (parameters.length > 0) {
         const param = parameters[0];
@@ -154,6 +120,7 @@ function findUndefinedPropsInComponent(
         const paramName = param.getName();
         if (paramName) {
             parameterNames.add(paramName);
+            propsParamName = paramName;
         }
 
         // Also get destructured parameter names
@@ -176,7 +143,7 @@ function findUndefinedPropsInComponent(
         if (initializer && Node.isJsxExpression(initializer)) {
             const expression = initializer.getExpression();
             if (expression) {
-                collectIdentifiersFromExpression(expression, usedIdentifiers);
+                collectIdentifiersFromExpression(expression, usedIdentifiers, propsParamName);
             }
         }
     });
@@ -186,9 +153,13 @@ function findUndefinedPropsInComponent(
     jsxExpressions.forEach((expr) => {
         const expression = expr.getExpression();
         if (expression) {
-            collectIdentifiersFromExpression(expression, usedIdentifiers);
+            collectIdentifiersFromExpression(expression, usedIdentifiers, propsParamName);
         }
     });
+
+    // Pre-calculate known symbols to avoid repeated expensive checks
+    // Start from parent to avoid adding the component's own parameters as known symbols
+    const knownSymbols = getKnownSymbols(componentFunction.getParent(), componentFunction);
 
     // Filter out identifiers that are already defined as props or are built-in/imported
     usedIdentifiers.forEach((identifier) => {
@@ -196,7 +167,7 @@ function findUndefinedPropsInComponent(
             !existingProps.has(identifier) &&
             !destructuredProps.has(identifier) &&
             !parameterNames.has(identifier) &&
-            !isBuiltInOrImported(identifier, componentFunction)
+            !knownSymbols.has(identifier)
         ) {
             const type = guessType(identifier);
             undefinedProps.push({ name: identifier, type });
@@ -206,7 +177,7 @@ function findUndefinedPropsInComponent(
     return undefinedProps;
 }
 
-function collectIdentifiersFromExpression(expression: Node, identifiers: Set<string>) {
+function collectIdentifiersFromExpression(expression: Node, identifiers: Set<string>, propsParamName?: string) {
     if (Node.isIdentifier(expression)) {
         identifiers.add(expression.getText());
         return; // Don't process children for identifiers
@@ -215,46 +186,77 @@ function collectIdentifiersFromExpression(expression: Node, identifiers: Set<str
     // Handle property access (e.g., props.something -> "something")
     if (Node.isPropertyAccessExpression(expression)) {
         const left = expression.getExpression();
-        if (Node.isIdentifier(left)) {
-            // Only add the property name, not the object name
+        if (Node.isIdentifier(left) && propsParamName && left.getText() === propsParamName) {
+            // Only add the property name if it's accessing the props object
             identifiers.add(expression.getName());
-            return; // Don't process children for property access expressions
+            return; 
         }
+        
+        // If it's not props.something, recurse on the left side (object)
+        // e.g. user.name -> recurse on user. user is added. name is ignored.
+        collectIdentifiersFromExpression(left, identifiers, propsParamName);
+        return;
     }
 
     // Handle conditional expressions, binary expressions, etc.
     expression.getChildren().forEach((child) => {
-        collectIdentifiersFromExpression(child, identifiers);
+        collectIdentifiersFromExpression(child, identifiers, propsParamName);
     });
 }
 
-function isBuiltInOrImported(identifier: string, componentFunction: FunctionDeclaration | ArrowFunction): boolean {
+function getKnownSymbols(
+    startingScope: Node | undefined,
+    componentFunction: FunctionDeclaration | ArrowFunction
+): Set<string> {
+    const symbols = new Set<string>();
     const sourceFile = componentFunction.getSourceFile();
 
-    // Check if it's an import
+    // 1. Imports
     const imports = sourceFile.getImportDeclarations();
     for (const importDecl of imports) {
         const namedImports = importDecl.getNamedImports();
-        if (namedImports.some((imp) => imp.getName() === identifier)) {
-            return true;
-        }
+        namedImports.forEach((imp) => symbols.add(imp.getName()));
 
         const defaultImport = importDecl.getDefaultImport();
-        if (defaultImport && defaultImport.getText() === identifier) {
-            return true;
+        if (defaultImport) {
+            symbols.add(defaultImport.getText());
         }
     }
 
-    // Check if it's a variable declared in the same scope
-    const functionScope = componentFunction.getParent();
-    if (functionScope) {
-        const variables = functionScope.getDescendantsOfKind(SyntaxKind.VariableDeclaration);
-        if (variables.some((v) => v.getName() === identifier)) {
-            return true;
+    // 2. Variables in the component and parent scopes
+    // Start from the provided scope (typically componentFunction.getParent()) to avoid
+    // adding the component's own parameters as known symbols
+    let currentScope: Node | undefined = startingScope;
+    while (currentScope) {
+        // Get variable declarations in this scope
+        if (Node.isBlock(currentScope) || Node.isSourceFile(currentScope) || Node.isModuleBlock(currentScope)) {
+             const varStatements = currentScope.getVariableStatements();
+             for (const stmt of varStatements) {
+                 const decls = stmt.getDeclarations();
+                 for (const decl of decls) {
+                     symbols.add(decl.getName());
+                 }
+             }
+        } else if (Node.isFunctionDeclaration(currentScope) || Node.isArrowFunction(currentScope)) {
+             // Function parameters (but not the component function's parameters)
+             currentScope.getParameters().forEach(p => {
+                 const name = p.getName();
+                 if (name) symbols.add(name);
+                 // Destructuring
+                 const binding = p.getFirstChildByKind(SyntaxKind.ObjectBindingPattern);
+                 if (binding) {
+                     binding.getElements().forEach(e => {
+                         const n = e.getName();
+                         if (n) symbols.add(n);
+                     });
+                 }
+             });
         }
+
+        currentScope = currentScope.getParent();
     }
 
-    // Check if it's a built-in identifier (like console, window, document, etc.)
+    // 3. Built-ins
     const builtIns = [
         "console",
         "window",
@@ -268,8 +270,11 @@ function isBuiltInOrImported(identifier: string, componentFunction: FunctionDecl
         "null",
         "true",
         "false",
+        "Math", "JSON", "Object", "Array", "String", "Number", "Boolean", "Date", "RegExp", "Error", "Promise", "Map", "Set"
     ];
-    return builtIns.includes(identifier);
+    builtIns.forEach(s => symbols.add(s));
+
+    return symbols;
 }
 
 function guessType(propName: string): string {
