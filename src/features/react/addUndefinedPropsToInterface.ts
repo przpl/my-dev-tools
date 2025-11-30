@@ -111,6 +111,7 @@ function findUndefinedPropsInComponent(
     const parameters = componentFunction.getParameters();
     const destructuredProps = new Set<string>();
     const parameterNames = new Set<string>();
+    let propsParamName: string | undefined;
 
     if (parameters.length > 0) {
         const param = parameters[0];
@@ -119,6 +120,7 @@ function findUndefinedPropsInComponent(
         const paramName = param.getName();
         if (paramName) {
             parameterNames.add(paramName);
+            propsParamName = paramName;
         }
 
         // Also get destructured parameter names
@@ -141,7 +143,7 @@ function findUndefinedPropsInComponent(
         if (initializer && Node.isJsxExpression(initializer)) {
             const expression = initializer.getExpression();
             if (expression) {
-                collectIdentifiersFromExpression(expression, usedIdentifiers);
+                collectIdentifiersFromExpression(expression, usedIdentifiers, propsParamName);
             }
         }
     });
@@ -151,9 +153,12 @@ function findUndefinedPropsInComponent(
     jsxExpressions.forEach((expr) => {
         const expression = expr.getExpression();
         if (expression) {
-            collectIdentifiersFromExpression(expression, usedIdentifiers);
+            collectIdentifiersFromExpression(expression, usedIdentifiers, propsParamName);
         }
     });
+
+    // Pre-calculate known symbols to avoid repeated expensive checks
+    const knownSymbols = getKnownSymbols(componentFunction);
 
     // Filter out identifiers that are already defined as props or are built-in/imported
     usedIdentifiers.forEach((identifier) => {
@@ -161,7 +166,7 @@ function findUndefinedPropsInComponent(
             !existingProps.has(identifier) &&
             !destructuredProps.has(identifier) &&
             !parameterNames.has(identifier) &&
-            !isBuiltInOrImported(identifier, componentFunction)
+            !knownSymbols.has(identifier)
         ) {
             const type = guessType(identifier);
             undefinedProps.push({ name: identifier, type });
@@ -171,7 +176,7 @@ function findUndefinedPropsInComponent(
     return undefinedProps;
 }
 
-function collectIdentifiersFromExpression(expression: Node, identifiers: Set<string>) {
+function collectIdentifiersFromExpression(expression: Node, identifiers: Set<string>, propsParamName?: string) {
     if (Node.isIdentifier(expression)) {
         identifiers.add(expression.getText());
         return; // Don't process children for identifiers
@@ -180,52 +185,86 @@ function collectIdentifiersFromExpression(expression: Node, identifiers: Set<str
     // Handle property access (e.g., props.something -> "something")
     if (Node.isPropertyAccessExpression(expression)) {
         const left = expression.getExpression();
-        if (Node.isIdentifier(left)) {
-            // Only add the property name, not the object name
+        if (Node.isIdentifier(left) && propsParamName && left.getText() === propsParamName) {
+            // Only add the property name if it's accessing the props object
             identifiers.add(expression.getName());
-            return; // Don't process children for property access expressions
+            return; 
         }
+        
+        // If it's not props.something, recurse on the left side (object)
+        // e.g. user.name -> recurse on user. user is added. name is ignored.
+        collectIdentifiersFromExpression(left, identifiers, propsParamName);
+        return;
     }
 
     // Handle conditional expressions, binary expressions, etc.
     expression.getChildren().forEach((child) => {
-        collectIdentifiersFromExpression(child, identifiers);
+        collectIdentifiersFromExpression(child, identifiers, propsParamName);
     });
 }
 
-function isBuiltInOrImported(identifier: string, componentFunction: FunctionDeclaration | ArrowFunction): boolean {
+function getKnownSymbols(componentFunction: FunctionDeclaration | ArrowFunction): Set<string> {
+    const symbols = new Set<string>();
     const sourceFile = componentFunction.getSourceFile();
 
-    // Check if it's an import
+    // 1. Imports
     const imports = sourceFile.getImportDeclarations();
     for (const importDecl of imports) {
         const namedImports = importDecl.getNamedImports();
-        if (namedImports.some((imp) => imp.getName() === identifier)) {
-            return true;
-        }
+        namedImports.forEach((imp) => symbols.add(imp.getName()));
 
         const defaultImport = importDecl.getDefaultImport();
-        if (defaultImport && defaultImport.getText() === identifier) {
-            return true;
+        if (defaultImport) {
+            symbols.add(defaultImport.getText());
         }
     }
 
-    // Check if it's a variable declared inside the component function
-    const componentVariables = componentFunction.getDescendantsOfKind(SyntaxKind.VariableDeclaration);
-    if (componentVariables.some((v) => v.getName() === identifier)) {
-        return true;
-    }
-
-    // Check if it's a variable declared in the same scope (file level)
-    const functionScope = componentFunction.getParent();
-    if (functionScope) {
-        const variables = functionScope.getDescendantsOfKind(SyntaxKind.VariableDeclaration);
-        if (variables.some((v) => v.getName() === identifier)) {
-            return true;
+    // 2. Variables in the component and parent scopes
+    let currentScope: Node | undefined = componentFunction;
+    while (currentScope) {
+        // Get variable declarations in this scope
+        // We use getDescendantsOfKind(VariableDeclaration) but restricted to direct children would be better
+        // But ts-morph doesn't have getVariableDeclarations() on all nodes easily.
+        // However, getVariableStatements() works for Block, SourceFile.
+        
+        if (Node.isBlock(currentScope) || Node.isSourceFile(currentScope) || Node.isModuleBlock(currentScope)) {
+             const varStatements = currentScope.getVariableStatements();
+             for (const stmt of varStatements) {
+                 const decls = stmt.getDeclarations();
+                 for (const decl of decls) {
+                     symbols.add(decl.getName());
+                 }
+             }
+        } else if (Node.isFunctionDeclaration(currentScope) || Node.isArrowFunction(currentScope)) {
+             // Function parameters
+             currentScope.getParameters().forEach(p => {
+                 const name = p.getName();
+                 if (name) symbols.add(name);
+                 // Destructuring
+                 const binding = p.getFirstChildByKind(SyntaxKind.ObjectBindingPattern);
+                 if (binding) {
+                     binding.getElements().forEach(e => {
+                         const n = e.getName();
+                         if (n) symbols.add(n);
+                     });
+                 }
+             });
+             
+             // Variables inside function body (if it has a body block, it's handled by Block check above? 
+             // No, ArrowFunction might have expression body. FunctionDeclaration has Body Block.
+             // If it has a Block, the Block is a child, so we will visit it if we traverse up?
+             // No, we are traversing UP from component.
+             // If component is inside a Block, we visit the Block.
+             // If component is inside a Function, we visit the Function.
+             // The Function's body Block is the parent of the component (if component is in body).
+             // So we visit Block, then Function.
+             // Block handles variables. Function handles parameters.
         }
+
+        currentScope = currentScope.getParent();
     }
 
-    // Check if it's a built-in identifier (like console, window, document, etc.)
+    // 3. Built-ins
     const builtIns = [
         "console",
         "window",
@@ -239,8 +278,11 @@ function isBuiltInOrImported(identifier: string, componentFunction: FunctionDecl
         "null",
         "true",
         "false",
+        "Math", "JSON", "Object", "Array", "String", "Number", "Boolean", "Date", "RegExp", "Error", "Promise", "Map", "Set"
     ];
-    return builtIns.includes(identifier);
+    builtIns.forEach(s => symbols.add(s));
+
+    return symbols;
 }
 
 function guessType(propName: string): string {
