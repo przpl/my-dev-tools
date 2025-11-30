@@ -240,14 +240,14 @@
         "@types/node": "^20.17.6",
         "@types/vscode": "^1.100.1",
         "@vscode/test-electron": "^2.5.2",
-        "@vscode/vsce": "^3.6.0",
-        "esbuild": "^0.25.8",
-        "mocha": "^11.7.1",
-        "rimraf": "^6.0.1",
-        "typescript": "^5.8.3"
+        "@vscode/vsce": "^3.7.1",
+        "esbuild": "^0.27.0",
+        "mocha": "^11.7.5",
+        "rimraf": "^6.1.2",
+        "typescript": "^5.9.3"
     },
     "dependencies": {
-        "es-toolkit": "^1.39.8",
-        "ts-morph": "^26.0.0"
+        "es-toolkit": "^1.42.0",
+        "ts-morph": "^27.0.2"
     }
 }
