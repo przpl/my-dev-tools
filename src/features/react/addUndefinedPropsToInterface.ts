@@ -158,7 +158,8 @@ function findUndefinedPropsInComponent(
     });
 
     // Pre-calculate known symbols to avoid repeated expensive checks
-    const knownSymbols = getKnownSymbols(componentFunction);
+    // Start from parent to avoid adding the component's own parameters as known symbols
+    const knownSymbols = getKnownSymbols(componentFunction.getParent(), componentFunction);
 
     // Filter out identifiers that are already defined as props or are built-in/imported
     usedIdentifiers.forEach((identifier) => {
@@ -203,7 +204,10 @@ function collectIdentifiersFromExpression(expression: Node, identifiers: Set<str
     });
 }
 
-function getKnownSymbols(componentFunction: FunctionDeclaration | ArrowFunction): Set<string> {
+function getKnownSymbols(
+    startingScope: Node | undefined,
+    componentFunction: FunctionDeclaration | ArrowFunction
+): Set<string> {
     const symbols = new Set<string>();
     const sourceFile = componentFunction.getSourceFile();
 
@@ -220,13 +224,11 @@ function getKnownSymbols(componentFunction: FunctionDeclaration | ArrowFunction)
     }
 
     // 2. Variables in the component and parent scopes
-    let currentScope: Node | undefined = componentFunction;
+    // Start from the provided scope (typically componentFunction.getParent()) to avoid
+    // adding the component's own parameters as known symbols
+    let currentScope: Node | undefined = startingScope;
     while (currentScope) {
         // Get variable declarations in this scope
-        // We use getDescendantsOfKind(VariableDeclaration) but restricted to direct children would be better
-        // But ts-morph doesn't have getVariableDeclarations() on all nodes easily.
-        // However, getVariableStatements() works for Block, SourceFile.
-        
         if (Node.isBlock(currentScope) || Node.isSourceFile(currentScope) || Node.isModuleBlock(currentScope)) {
              const varStatements = currentScope.getVariableStatements();
              for (const stmt of varStatements) {
@@ -236,7 +238,7 @@ function getKnownSymbols(componentFunction: FunctionDeclaration | ArrowFunction)
                  }
              }
         } else if (Node.isFunctionDeclaration(currentScope) || Node.isArrowFunction(currentScope)) {
-             // Function parameters
+             // Function parameters (but not the component function's parameters)
              currentScope.getParameters().forEach(p => {
                  const name = p.getName();
                  if (name) symbols.add(name);
@@ -249,16 +251,6 @@ function getKnownSymbols(componentFunction: FunctionDeclaration | ArrowFunction)
                      });
                  }
              });
-             
-             // Variables inside function body (if it has a body block, it's handled by Block check above? 
-             // No, ArrowFunction might have expression body. FunctionDeclaration has Body Block.
-             // If it has a Block, the Block is a child, so we will visit it if we traverse up?
-             // No, we are traversing UP from component.
-             // If component is inside a Block, we visit the Block.
-             // If component is inside a Function, we visit the Function.
-             // The Function's body Block is the parent of the component (if component is in body).
-             // So we visit Block, then Function.
-             // Block handles variables. Function handles parameters.
         }
 
         currentScope = currentScope.getParent();

@@ -33,7 +33,7 @@ export async function addPropsToComponent() {
         });
 
         // Get position before cleanup
-        const propsInterfacePos = propsInterface.getPos() + "interface Props {".length;
+        const propsInterfacePos = propsInterface.getPos() + `interface ${propsInterface.getName()} {`.length;
         const updatedText = context.sourceFile.getFullText();
 
         await VsCodeUtils.applyChangesToWorkspace(context, updatedText);

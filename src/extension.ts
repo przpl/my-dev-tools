@@ -65,7 +65,7 @@ export function activateUpdatePropsDestructuring(context: vscode.ExtensionContex
         while (currentNode) {
             if (currentNode.getKind() === SyntaxKind.InterfaceDeclaration) {
                 const interfaceDeclaration = currentNode as InterfaceDeclaration;
-                if (interfaceDeclaration.getName() === "Props") {
+                if (interfaceDeclaration.getName().endsWith("Props")) {
                     isInsidePropsInterface = true;
                     break;
                 }
