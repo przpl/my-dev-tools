@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { addPropsToComponent } from "../../features/react/addPropsToComponent";
+import { addPropsToComponent } from "../../../features/react/addPropsToComponent";
 
 suite("AddPropsToComponent Tests", () => {
     let testDocument: vscode.TextDocument;

@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { updatePropsDestructuring } from "../../features/react/updatePropsDestructuring";
+import { updatePropsDestructuring } from "../../../features/react/updatePropsDestructuring";
 
 suite("UpdatePropsDestructuring Tests", () => {
     let testDocument: vscode.TextDocument;

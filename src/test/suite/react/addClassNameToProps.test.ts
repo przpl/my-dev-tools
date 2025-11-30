@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { addClassNameToProps } from "../../features/react/addClassNameToProps";
+import { addClassNameToProps } from "../../../features/react/addClassNameToProps";
 
 suite("AddClassNameToProps Tests", () => {
     let testDocument: vscode.TextDocument;
