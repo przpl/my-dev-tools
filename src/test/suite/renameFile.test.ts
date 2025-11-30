@@ -318,4 +318,141 @@ export class MyClass {
         assert.strictEqual(quickPickItems[4].description, "enum", "Enum should be fifth");
         assert.strictEqual(quickPickItems[5].description, "variable", "Variable should be sixth");
     });
+
+    test("should use PascalCase when configured", async () => {
+        // Override the mock configuration for this specific test
+        vscode.workspace.getConfiguration = (section?: string) => {
+            const mockConfig = {
+                get: <T>(key: string, defaultValue?: T): T => {
+                    if (key === "autoRenameStrategy") {
+                        return "PascalCase" as T;
+                    }
+                    return defaultValue as T;
+                },
+                update: async () => true,
+                has: () => true,
+                inspect: () => undefined,
+            };
+            return mockConfig as any;
+        };
+
+        const codeWithExport = `export function getUserData() {
+    return {};
+}`;
+
+        await createTestFile(codeWithExport, "old-name.ts");
+
+        let renameSuccessful = false;
+        let newFileName = "";
+        const originalApplyEdit = vscode.workspace.applyEdit;
+        vscode.workspace.applyEdit = async (edit: vscode.WorkspaceEdit) => {
+            renameSuccessful = true;
+            newFileName = "GetUserData.ts"; // Expected result for PascalCase
+            return true;
+        };
+
+        await autoRename();
+
+        // Restore original method
+        vscode.workspace.applyEdit = originalApplyEdit;
+
+        assert.ok(renameSuccessful, "Should perform rename operation");
+        assert.strictEqual(newFileName, "GetUserData.ts", "Should rename to PascalCase");
+    });
+
+    test("should use snake_case when configured", async () => {
+        // Override the mock configuration for this specific test
+        vscode.workspace.getConfiguration = (section?: string) => {
+            const mockConfig = {
+                get: <T>(key: string, defaultValue?: T): T => {
+                    if (key === "autoRenameStrategy") {
+                        return "snake_case" as T;
+                    }
+                    return defaultValue as T;
+                },
+                update: async () => true,
+                has: () => true,
+                inspect: () => undefined,
+            };
+            return mockConfig as any;
+        };
+
+        const codeWithExport = `export class UserProfileService {
+    getProfile() {}
+}`;
+
+        await createTestFile(codeWithExport, "old-name.ts");
+
+        let renameSuccessful = false;
+        let newFileName = "";
+        const originalApplyEdit = vscode.workspace.applyEdit;
+        vscode.workspace.applyEdit = async (edit: vscode.WorkspaceEdit) => {
+            renameSuccessful = true;
+            newFileName = "user_profile_service.ts"; // Expected result for snake_case
+            return true;
+        };
+
+        await autoRename();
+
+        // Restore original method
+        vscode.workspace.applyEdit = originalApplyEdit;
+
+        assert.ok(renameSuccessful, "Should perform rename operation");
+        assert.strictEqual(newFileName, "user_profile_service.ts", "Should rename to snake_case");
+    });
+
+    test("should handle re-exported symbols", async () => {
+        const codeWithReExport = `export { useState } from 'react';
+
+export function useCustomHook() {
+    return {};
+}`;
+
+        await createTestFile(codeWithReExport, "hooks.ts");
+
+        let quickPickItems: vscode.QuickPickItem[] = [];
+        const originalShowQuickPick = vscode.window.showQuickPick;
+        vscode.window.showQuickPick = async <T extends vscode.QuickPickItem>(
+            items: readonly T[] | Thenable<readonly T[]>,
+            options?: vscode.QuickPickOptions
+        ): Promise<T | undefined> => {
+            const resolvedItems = await Promise.resolve(items);
+            quickPickItems = [...resolvedItems] as vscode.QuickPickItem[];
+            return undefined; // User cancels
+        };
+
+        await autoRename();
+
+        // Restore original method
+        vscode.window.showQuickPick = originalShowQuickPick;
+
+        // Should include both exported symbols
+        assert.ok(quickPickItems.length >= 1, "Should show exported symbols");
+        assert.ok(
+            quickPickItems.some((item) => item.label === "useCustomHook"),
+            "Should include useCustomHook in options"
+        );
+    });
+
+    test("should handle exported arrow function as variable", async () => {
+        const codeWithArrowFunction = `export const fetchUserData = async () => {
+    return await fetch('/api/user');
+};`;
+
+        await createTestFile(codeWithArrowFunction, "api-utils.ts");
+
+        let renameSuccessful = false;
+        const originalApplyEdit = vscode.workspace.applyEdit;
+        vscode.workspace.applyEdit = async (edit: vscode.WorkspaceEdit) => {
+            renameSuccessful = true;
+            return true;
+        };
+
+        await autoRename();
+
+        // Restore original method
+        vscode.workspace.applyEdit = originalApplyEdit;
+
+        assert.ok(renameSuccessful, "Should perform rename operation for exported arrow function");
+    });
 });

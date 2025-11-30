@@ -110,4 +110,58 @@ function MyComponent() {
             "Props interface should not be exported"
         );
     });
+
+    test("should work with function declaration style components", async () => {
+        const initialCode = `export function MyComponent() {
+    return <div>Hello World</div>;
+}`;
+
+        await testEditor.edit((editBuilder) => {
+            editBuilder.insert(new vscode.Position(0, 0), initialCode);
+        });
+
+        await addPropsToComponent();
+        const updatedContent = testDocument.getText();
+
+        assert.ok(updatedContent.includes("interface Props {"), "Should add Props interface for exported function");
+        assert.ok(updatedContent.includes("function MyComponent({ }: Props)"), "Should add empty destructured props");
+    });
+
+    test("should not modify arrow function that already has props", async () => {
+        const codeWithExistingProps = `interface Props {
+    value: number;
+}
+
+const MyComponent = ({ value }: Props) => {
+    return <span>{value}</span>;
+};`;
+
+        await testEditor.edit((editBuilder) => {
+            editBuilder.insert(new vscode.Position(0, 0), codeWithExistingProps);
+        });
+
+        const originalContent = testDocument.getText();
+        await addPropsToComponent();
+        const updatedContent = testDocument.getText();
+
+        assert.strictEqual(originalContent, updatedContent, "Should not modify arrow function with existing props");
+    });
+
+    test("should handle component with JSX fragment", async () => {
+        const initialCode = `function MyComponent() {
+    return <>
+        <div>First</div>
+        <div>Second</div>
+    </>;
+}`;
+
+        await testEditor.edit((editBuilder) => {
+            editBuilder.insert(new vscode.Position(0, 0), initialCode);
+        });
+
+        await addPropsToComponent();
+        const updatedContent = testDocument.getText();
+
+        assert.ok(updatedContent.includes("interface Props {"), "Should add Props interface for fragment component");
+    });
 });

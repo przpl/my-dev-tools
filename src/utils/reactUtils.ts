@@ -1,12 +1,25 @@
 import { ArrowFunction, FunctionDeclaration, InterfaceDeclaration, Node, Project, SourceFile, SyntaxKind } from "ts-morph";
 import * as vscode from "vscode";
 
+import { ProjectManager } from "./projectManager";
+import { VsCodeUtils } from "./vsCodeUtils";
+
 export interface ReactWorkspaceContext {
     editor: vscode.TextEditor;
     document: vscode.TextDocument;
     text: string;
     project: Project;
     sourceFile: SourceFile;
+    /** Clean up memory by forgetting the source file */
+    cleanup: () => void;
+}
+
+export interface PropsOperationContext {
+    context: ReactWorkspaceContext;
+    componentFunction: FunctionDeclaration | ArrowFunction;
+    propsInterface: InterfaceDeclaration;
+    propsInterfaceName: string;
+    hasDestructuredProps: boolean;
 }
 
 export namespace ReactUtils {
@@ -20,7 +33,7 @@ export namespace ReactUtils {
         const document = editor.document;
         const text = document.getText();
 
-        const project = new Project({ useInMemoryFileSystem: true });
+        const project = ProjectManager.getInMemoryProject();
         const sourceFile = project.createSourceFile("temp.tsx", text, { overwrite: true });
 
         return {
@@ -29,7 +42,93 @@ export namespace ReactUtils {
             text,
             project,
             sourceFile,
+            cleanup: () => ProjectManager.forgetSourceFile(sourceFile),
         };
+    }
+
+    /**
+     * Higher-order utility for operations that work with React props interface.
+     * Handles common setup, interface creation, and cleanup.
+     */
+    export async function withPropsInterface(operation: (ctx: PropsOperationContext) => Promise<void> | void): Promise<void> {
+        const context = setupWorkspaceContext();
+        if (!context) {
+            return;
+        }
+
+        try {
+            const componentFunction = findReactComponent(context.sourceFile);
+            if (!componentFunction) {
+                vscode.window.showErrorMessage(ErrorMessages.NO_REACT_COMPONENT);
+                return;
+            }
+
+            let propsInterface = findPropsInterface(context.sourceFile, componentFunction);
+            let propsInterfaceName = "Props";
+
+            if (!propsInterface) {
+                const existingParameter = componentFunction.getParameters()[0];
+                if (existingParameter) {
+                    const typeNode = existingParameter.getTypeNode();
+                    if (typeNode && typeNode.getKind() === SyntaxKind.TypeReference) {
+                        propsInterfaceName = typeNode.getText();
+                    }
+                }
+
+                propsInterface = findOrCreatePropsInterface(context.sourceFile, componentFunction, propsInterfaceName);
+
+                if (!componentHasProps(componentFunction)) {
+                    componentFunction.addParameter({
+                        name: "{ }",
+                        type: propsInterfaceName,
+                    });
+                }
+            } else {
+                propsInterfaceName = propsInterface.getName() || "Props";
+            }
+
+            const hasDestructuredProps =
+                componentFunction.getParameters().length > 0 &&
+                componentFunction.getParameters()[0].getFirstChildByKind(SyntaxKind.ObjectBindingPattern) !== undefined;
+
+            await operation({
+                context,
+                componentFunction,
+                propsInterface,
+                propsInterfaceName,
+                hasDestructuredProps,
+            });
+        } finally {
+            context.cleanup();
+        }
+    }
+
+    /**
+     * Apply changes to the workspace and optionally move cursor to props interface.
+     * NOTE: Must be called BEFORE cleanup() as it accesses propsInterface.
+     */
+    export async function applyPropsChanges(
+        ctx: PropsOperationContext,
+        options: { moveCursorToProps?: boolean; updateDestructuring?: boolean } = {}
+    ): Promise<void> {
+        const { context, propsInterface, hasDestructuredProps } = ctx;
+        const { moveCursorToProps = true, updateDestructuring = true } = options;
+
+        // Get the start position BEFORE applying changes (node will still be valid)
+        const propsStart = moveCursorToProps ? propsInterface.getStart() : 0;
+        const updatedText = context.sourceFile.getFullText();
+        
+        await VsCodeUtils.applyChangesToWorkspace(context, updatedText);
+
+        if (updateDestructuring && hasDestructuredProps) {
+            // Dynamic import to avoid circular dependency
+            const { updatePropsDestructuring } = await import("../features/react/updatePropsDestructuring");
+            await updatePropsDestructuring(context.document);
+        }
+
+        if (moveCursorToProps) {
+            VsCodeUtils.moveCursorToPosition(context.editor, context.document, propsStart);
+        }
     }
 
     /**

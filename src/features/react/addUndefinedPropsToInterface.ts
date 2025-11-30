@@ -1,8 +1,7 @@
 import { ArrowFunction, BindingElement, FunctionDeclaration, Node, SyntaxKind } from "ts-morph";
 import * as vscode from "vscode";
+
 import { ReactUtils } from "../../utils/reactUtils";
-import { VsCodeUtils } from "../../utils/vsCodeUtils";
-import { updatePropsDestructuring } from "./updatePropsDestructuring";
 
 interface UndefinedProp {
     name: string;
@@ -10,6 +9,7 @@ interface UndefinedProp {
 }
 
 const typeGuesses = new Map<string, string>([
+    // String types
     ["className", "string"],
     ["title", "string"],
     ["name", "string"],
@@ -26,6 +26,12 @@ const typeGuesses = new Map<string, string>([
     ["href", "string"],
     ["type", "string"],
     ["role", "string"],
+    ["variant", "string"],
+    ["color", "string"],
+    ["testId", "string"],
+    ["ariaLabel", "string"],
+
+    // Number types
     ["count", "number"],
     ["length", "number"],
     ["width", "number"],
@@ -36,6 +42,8 @@ const typeGuesses = new Map<string, string>([
     ["min", "number"],
     ["step", "number"],
     ["tabIndex", "number"],
+
+    // Boolean types
     ["isVisible", "boolean"],
     ["isOpen", "boolean"],
     ["isDisabled", "boolean"],
@@ -52,87 +60,44 @@ const typeGuesses = new Map<string, string>([
     ["open", "boolean"],
     ["active", "boolean"],
     ["selected", "boolean"],
+
+    // React-specific types
+    ["children", "React.ReactNode"],
+    ["style", "React.CSSProperties"],
+
+    // Event handlers
+    ["onClick", "() => void"],
 ]);
 
 export async function addUndefinedPropsToInterface() {
-    const context = ReactUtils.setupWorkspaceContext();
-    if (!context) {
-        return;
-    }
+    await ReactUtils.withPropsInterface(async (ctx) => {
+        const { componentFunction, propsInterface, propsInterfaceName } = ctx;
 
-    // Find React component function
-    const componentFunction = ReactUtils.findReactComponent(context.sourceFile);
-    if (!componentFunction) {
-        vscode.window.showErrorMessage(ReactUtils.ErrorMessages.NO_REACT_COMPONENT);
-        return;
-    }
+        // Get existing props from the interface
+        const existingProps = new Set(propsInterface.getProperties().map((p) => p.getName()));
 
-    // Find or create Props interface
-    let propsInterface = ReactUtils.findPropsInterface(context.sourceFile, componentFunction);
-    let propsInterfaceName = "Props";
+        // Find undefined symbols used in the component
+        const undefinedProps = findUndefinedPropsInComponent(componentFunction, existingProps);
 
-    if (!propsInterface) {
-        // If no Props interface exists, determine the name and create it
-        const existingParameter = componentFunction.getParameters()[0];
-        if (existingParameter) {
-            const typeNode = existingParameter.getTypeNode();
-            if (typeNode && typeNode.getKind() === SyntaxKind.TypeReference) {
-                propsInterfaceName = typeNode.getText();
-            }
+        if (undefinedProps.length === 0) {
+            vscode.window.showInformationMessage("No undefined props found in the component");
+            return;
         }
 
-        propsInterface = ReactUtils.findOrCreatePropsInterface(context.sourceFile, componentFunction, propsInterfaceName);
-
-        // Update component function parameter if it doesn't exist
-        if (!ReactUtils.componentHasProps(componentFunction)) {
-            componentFunction.addParameter({
-                name: "{ }",
-                type: propsInterfaceName,
+        // Add undefined props to the interface
+        undefinedProps.forEach((prop) => {
+            propsInterface.addProperty({
+                name: prop.name,
+                type: prop.type,
+                hasQuestionToken: false, // Make props required (not optional)
             });
-        }
-    } else {
-        propsInterfaceName = propsInterface.getName() || "Props";
-    }
-
-    // Get existing props from the interface
-    const existingProps = new Set(propsInterface.getProperties().map((p) => p.getName()));
-
-    // Find undefined symbols used in the component
-    const undefinedProps = findUndefinedPropsInComponent(componentFunction, existingProps);
-
-    if (undefinedProps.length === 0) {
-        vscode.window.showInformationMessage("No undefined props found in the component");
-        return;
-    }
-
-    // Add undefined props to the interface
-    undefinedProps.forEach((prop) => {
-        propsInterface!.addProperty({
-            name: prop.name,
-            type: prop.type,
-            hasQuestionToken: false, // Make props required (not optional)
         });
+
+        // Apply changes and update destructuring
+        await ReactUtils.applyPropsChanges(ctx);
+
+        vscode.window.showInformationMessage(`Added ${undefinedProps.length} props to ${propsInterfaceName}`);
     });
-
-    // Check if props are destructured
-    const hasDestructuredProps =
-        componentFunction.getParameters().length > 0 &&
-        componentFunction.getParameters()[0].getFirstChildByKind(SyntaxKind.ObjectBindingPattern) !== undefined;
-
-    // Apply changes
-    const updatedText = context.sourceFile.getFullText();
-    await VsCodeUtils.applyChangesToWorkspace(context, updatedText);
-
-    // If props are destructured, run updatePropsDestructuring command
-    if (hasDestructuredProps) {
-        await updatePropsDestructuring(context.document);
-    }
-
-    // Move cursor to Props interface
-    const propsStart = propsInterface.getStart();
-    VsCodeUtils.moveCursorToPosition(context.editor, context.document, propsStart);
-
-    vscode.window.showInformationMessage(`Added ${undefinedProps.length} props to ${propsInterfaceName}`);
 }
 
 function findUndefinedPropsInComponent(
@@ -245,7 +210,13 @@ function isBuiltInOrImported(identifier: string, componentFunction: FunctionDecl
         }
     }
 
-    // Check if it's a variable declared in the same scope
+    // Check if it's a variable declared inside the component function
+    const componentVariables = componentFunction.getDescendantsOfKind(SyntaxKind.VariableDeclaration);
+    if (componentVariables.some((v) => v.getName() === identifier)) {
+        return true;
+    }
+
+    // Check if it's a variable declared in the same scope (file level)
     const functionScope = componentFunction.getParent();
     if (functionScope) {
         const variables = functionScope.getDescendantsOfKind(SyntaxKind.VariableDeclaration);

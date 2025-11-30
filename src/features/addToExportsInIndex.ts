@@ -1,8 +1,8 @@
 import * as path from "node:path";
-import { Project } from "ts-morph";
 import * as vscode from "vscode";
 
 import { FileUtils } from "../utils/fileUtils";
+import { ProjectManager } from "../utils/projectManager";
 
 export async function addToExportsInIndex() {
     const activeEditor = vscode.window.activeTextEditor;
@@ -14,7 +14,7 @@ export async function addToExportsInIndex() {
             const indexFilePath = indexFiles[0];
             const importPath = FileUtils.getImportPath(indexFilePath, exportedFilePath);
 
-            const project = new Project();
+            const project = ProjectManager.getFileSystemProject();
             const sourceFile = project.addSourceFileAtPath(indexFilePath);
             const selectedText = activeEditor.document.getText(activeEditor.selection);
 
@@ -48,6 +48,7 @@ export async function addToExportsInIndex() {
 
             sourceFile.organizeImports();
             await sourceFile.save();
+            sourceFile.forget();
         } else {
             vscode.window.showInformationMessage("No nearest index.ts file found.");
         }

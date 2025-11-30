@@ -2,7 +2,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 export namespace FileUtils {
-    /** Finds nearest files matching pattern. */
+    /** Finds nearest files matching pattern. Supports multi-workspace. */
     export async function findNearest(startFolderPath: string, pattern: string): Promise<string[]> {
         const foundFilePaths: string[] = [];
         const folderUri = vscode.Uri.file(startFolderPath);
@@ -15,17 +15,18 @@ export namespace FileUtils {
         // look in parent folder
         if (foundFilePaths.length === 0) {
             const parentFolder = path.dirname(startFolderPath);
-            const activeWorkspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.fsPath; // TODO: support multiple workspaces
 
-            // stop if we reached the workspace folder, don't go above
-            if (parentFolder === activeWorkspaceFolder) {
+            // Get the workspace folder for this specific path (supports multi-workspace)
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(folderUri);
+            const workspaceRoot = workspaceFolder?.uri.fsPath;
+
+            // Stop if we reached the workspace folder root or can't go higher
+            if (!workspaceRoot || parentFolder === workspaceRoot || parentFolder === startFolderPath) {
                 return foundFilePaths;
             }
 
-            if (parentFolder !== startFolderPath) {
-                const files = await findNearest(parentFolder, pattern);
-                foundFilePaths.push(...files);
-            }
+            const files = await findNearest(parentFolder, pattern);
+            foundFilePaths.push(...files);
         }
 
         return foundFilePaths;

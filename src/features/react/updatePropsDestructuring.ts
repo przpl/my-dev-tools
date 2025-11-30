@@ -1,52 +1,54 @@
-import { FunctionDeclaration, InterfaceDeclaration, Project, SyntaxKind } from "ts-morph";
+import { ArrowFunction, FunctionDeclaration, InterfaceDeclaration, SyntaxKind } from "ts-morph";
 import * as vscode from "vscode";
 
-let project: Project | null = null;
+import { ProjectManager } from "../../utils/projectManager";
 
 export async function updatePropsDestructuring(document: vscode.TextDocument) {
     const text = document.getText();
+    const sourceFile = ProjectManager.createTempSourceFile("temp.tsx", text);
 
-    if (!project) {
-        project = new Project({ useInMemoryFileSystem: true });
-    }
-
-    const sourceFile = project.createSourceFile("temp.tsx", text, { overwrite: true });
-
-    const interfaces = sourceFile.getDescendantsOfKind(SyntaxKind.InterfaceDeclaration);
-    if (interfaces.length === 0) {
-        return;
-    }
-
-    const functions = sourceFile.getDescendantsOfKind(SyntaxKind.FunctionDeclaration);
-    if (functions.length === 0) {
-        return;
-    }
-
-    let hasChanges = false;
-    interfaces.forEach((interfaceDeclaration) => {
-        if (interfaceDeclaration.getName()?.endsWith("Props")) {
-            const matchingFunction = findMatchingFunction(interfaceDeclaration, functions);
-            if (matchingFunction) {
-                hasChanges = updateFunctionParameter(interfaceDeclaration, matchingFunction) || hasChanges;
-            }
+    try {
+        const interfaces = sourceFile.getDescendantsOfKind(SyntaxKind.InterfaceDeclaration);
+        if (interfaces.length === 0) {
+            return;
         }
-    });
 
-    if (hasChanges) {
-        const updatedText = sourceFile.getFullText();
-        const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
+        const functions = sourceFile.getDescendantsOfKind(SyntaxKind.FunctionDeclaration);
+        const arrowFunctions = sourceFile.getDescendantsOfKind(SyntaxKind.ArrowFunction);
+        const allFunctions = [...functions, ...arrowFunctions];
+        
+        if (allFunctions.length === 0) {
+            return;
+        }
 
-        const edit = new vscode.WorkspaceEdit();
-        edit.replace(document.uri, fullRange, updatedText);
+        let hasChanges = false;
+        interfaces.forEach((interfaceDeclaration) => {
+            if (interfaceDeclaration.getName()?.endsWith("Props")) {
+                const matchingFunction = findMatchingFunction(interfaceDeclaration, allFunctions);
+                if (matchingFunction) {
+                    hasChanges = updateFunctionParameter(interfaceDeclaration, matchingFunction) || hasChanges;
+                }
+            }
+        });
 
-        return vscode.workspace.applyEdit(edit);
+        if (hasChanges) {
+            const updatedText = sourceFile.getFullText();
+            const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
+
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(document.uri, fullRange, updatedText);
+
+            return vscode.workspace.applyEdit(edit);
+        }
+    } finally {
+        ProjectManager.forgetSourceFile(sourceFile);
     }
 }
 
 function findMatchingFunction(
     interfaceDeclaration: InterfaceDeclaration,
-    functions: FunctionDeclaration[]
-): FunctionDeclaration | undefined {
+    functions: (FunctionDeclaration | ArrowFunction)[]
+): FunctionDeclaration | ArrowFunction | undefined {
     const interfaceName = interfaceDeclaration.getName();
     return functions.find((func) => {
         const parameters = func.getParameters();
@@ -54,7 +56,7 @@ function findMatchingFunction(
     });
 }
 
-function updateFunctionParameter(interfaceDeclaration: InterfaceDeclaration, functionDeclaration: FunctionDeclaration): boolean {
+function updateFunctionParameter(interfaceDeclaration: InterfaceDeclaration, functionDeclaration: FunctionDeclaration | ArrowFunction): boolean {
     const parameter = functionDeclaration.getParameters()[0];
     const object = parameter.getChildAtIndexIfKind(0, SyntaxKind.ObjectBindingPattern);
     if (!object) {

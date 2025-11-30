@@ -1,15 +1,17 @@
-import { InterfaceDeclaration, Project, SyntaxKind } from "ts-morph";
+import { debounce } from "es-toolkit";
+import { InterfaceDeclaration, SyntaxKind } from "ts-morph";
 import * as vscode from "vscode";
 
 import { addToExportsInIndex } from "./features/addToExportsInIndex";
-import { createNestJsController } from "./features/nestjs/createNestJsController";
 import { openNearestFile } from "./features/openNearestFile";
+import { updatePropsDestructuring } from "./features/react/updatePropsDestructuring";
+import { Config } from "./utils/config";
+import { ProjectManager } from "./utils/projectManager";
+import { createNestJsController } from "./features/nestjs/createNestJsController";
 import { addClassNameToProps } from "./features/react/addClassNameToProps";
 import { addPropsToComponent } from "./features/react/addPropsToComponent";
 import { addUndefinedPropsToInterface } from "./features/react/addUndefinedPropsToInterface";
-import { createScssModule } from "./features/react/createScssModule";
-import { updatePropsDestructuring } from "./features/react/updatePropsDestructuring";
-import { autoRename, renameToCamelCase, renameToKebabCase, renameToPascalCase, renameToSnakeCase } from "./features/renameFile";
+import { renameToCamelCase, renameToPascalCase, renameToSnakeCase, renameToKebabCase, autoRename } from "./features/renameFile";
 
 export function activate(context: vscode.ExtensionContext) {
     // Generic
@@ -22,7 +24,6 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.autoRename", autoRename));
 
     // React
-    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.createScssModule", createScssModule));
     activateUpdatePropsDestructuring(context);
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.addPropsToComponent", addPropsToComponent));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.addUndefinedPropsToInterface", addUndefinedPropsToInterface));
@@ -34,57 +35,57 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function activateUpdatePropsDestructuring(context: vscode.ExtensionContext) {
-    let timeout: NodeJS.Timeout | undefined;
-    const project = new Project({ useInMemoryFileSystem: true });
+    const debouncedUpdateProps = debounce(async (document: vscode.TextDocument) => {
+        await updatePropsDestructuring(document);
+    }, 350);
 
     const updatePropsHandler = (event: vscode.TextDocumentChangeEvent) => {
-        const config = vscode.workspace.getConfiguration("myDevTools");
-        const enableRealTimeUpdate = config.get<boolean>("enableRealTimePropsUpdate", false);
         const document = event.document;
 
-        if (enableRealTimeUpdate && document.languageId === "typescriptreact") {
-            const activeEditor = vscode.window.activeTextEditor;
+        // Early exit if not a TSX file or real-time updates are disabled
+        if (document.languageId !== "typescriptreact" || !Config.enableRealTimePropsUpdate) {
+            return;
+        }
 
-            if (!activeEditor || activeEditor.document.uri.toString() !== document.uri.toString()) {
-                return;
-            }
+        const activeEditor = vscode.window.activeTextEditor;
 
-            const cursorPosition = activeEditor.selection.active;
-            const offset = document.offsetAt(cursorPosition);
+        if (!activeEditor || activeEditor.document.uri.toString() !== document.uri.toString()) {
+            return;
+        }
 
-            const sourceFile = project.createSourceFile(document.uri.fsPath, document.getText(), { overwrite: true });
-            const nodeAtPosition = sourceFile.getDescendantAtPos(offset);
+        const cursorPosition = activeEditor.selection.active;
+        const offset = document.offsetAt(cursorPosition);
 
-            let isInsidePropsInterface = false;
-            let currentNode = nodeAtPosition;
+        const sourceFile = ProjectManager.createTempSourceFile(document.uri.fsPath, document.getText());
+        const nodeAtPosition = sourceFile.getDescendantAtPos(offset);
 
-            while (currentNode) {
-                if (currentNode.getKind() === SyntaxKind.InterfaceDeclaration) {
-                    const interfaceDeclaration = currentNode as InterfaceDeclaration;
-                    if (interfaceDeclaration.getName() === "Props") {
-                        isInsidePropsInterface = true;
-                        break;
-                    }
+        let isInsidePropsInterface = false;
+        let currentNode = nodeAtPosition;
+
+        while (currentNode) {
+            if (currentNode.getKind() === SyntaxKind.InterfaceDeclaration) {
+                const interfaceDeclaration = currentNode as InterfaceDeclaration;
+                if (interfaceDeclaration.getName() === "Props") {
+                    isInsidePropsInterface = true;
+                    break;
                 }
-                currentNode = currentNode.getParent();
             }
+            currentNode = currentNode.getParent();
+        }
 
-            if (isInsidePropsInterface) {
-                if (timeout) {
-                    clearTimeout(timeout);
-                }
-                timeout = setTimeout(async () => {
-                    await updatePropsDestructuring(document);
-                }, 350);
-            }
+        ProjectManager.forgetSourceFile(sourceFile);
+
+        if (isInsidePropsInterface) {
+            debouncedUpdateProps(document);
         }
     };
 
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument((event) => {
-            updatePropsHandler(event);
-        })
-    );
+    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(updatePropsHandler));
+
+    // Cancel debounced calls on deactivation
+    context.subscriptions.push({
+        dispose: () => debouncedUpdateProps.cancel(),
+    });
 
     // Add a command to manually trigger the update
     context.subscriptions.push(
@@ -99,9 +100,8 @@ export function activateUpdatePropsDestructuring(context: vscode.ExtensionContex
     // Add a command to toggle real-time updates
     context.subscriptions.push(
         vscode.commands.registerCommand("myDevTools.toggleRealTimePropsUpdate", () => {
-            const config = vscode.workspace.getConfiguration("myDevTools");
-            const currentValue = config.get<boolean>("enableRealTimePropsUpdate", true);
-            config.update("enableRealTimePropsUpdate", !currentValue, true);
+            const currentValue = Config.enableRealTimePropsUpdate;
+            Config.enableRealTimePropsUpdate = !currentValue;
             vscode.window.showInformationMessage(`Real-time Props update is now ${!currentValue ? "enabled" : "disabled"}`);
         })
     );
