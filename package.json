@@ -117,11 +117,6 @@
         "menus": {
             "explorer/context": [
                 {
-                    "command": "myDevTools.createScssModule",
-                    "when": "resourceLangId == typescriptreact",
-                    "group": "5_create"
-                },
-                {
                     "submenu": "NestJsToolsSubmenu",
                     "when": "explorerResourceIsFolder",
                     "group": "NestJsTools"
@@ -162,9 +157,6 @@
                 }
             ],
             "commandPalette": [
-                {
-                    "command": "myDevTools.createScssModule"
-                },
                 {
                     "command": "myDevTools.updatePropsDestructuring",
                     "when": "editorLangId == typescriptreact"
