@@ -12,6 +12,7 @@ import { addClassNameToProps } from "./features/react/addClassNameToProps";
 import { addPropsToComponent } from "./features/react/addPropsToComponent";
 import { addUndefinedPropsToInterface } from "./features/react/addUndefinedPropsToInterface";
 import { renameToCamelCase, renameToPascalCase, renameToSnakeCase, renameToKebabCase, autoRename } from "./features/renameFile";
+import { quickCommit } from "./features/git/quickCommit";
 
 export function activate(context: vscode.ExtensionContext) {
     // Generic
@@ -32,6 +33,9 @@ export function activate(context: vscode.ExtensionContext) {
     // NestJS
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.createNestJSController", createNestJsController));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.openNearestNestJSModule", () => openNearestFile("*.module.ts")));
+
+    // Git
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.quickCommit", quickCommit));
 }
 
 export function activateUpdatePropsDestructuring(context: vscode.ExtensionContext) {
