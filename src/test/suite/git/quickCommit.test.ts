@@ -110,7 +110,7 @@ suite("QuickCommit Tests", () => {
             return undefined;
         };
 
-        const mockRepo = createMockRepository("c:/projects/repo1");
+        const mockRepo = createMockRepository("/projects/repo1");
         (vscode.extensions as any).getExtension = () => createMockGitExtension([mockRepo]);
 
         await quickCommit();
@@ -125,7 +125,7 @@ suite("QuickCommit Tests", () => {
             return undefined;
         };
 
-        const mockRepo = createMockRepository("c:/projects/repo1");
+        const mockRepo = createMockRepository("/projects/repo1");
         (vscode.extensions as any).getExtension = () => createMockGitExtension([mockRepo]);
 
         // File is in a different path that doesn't match the repo
@@ -143,25 +143,25 @@ suite("QuickCommit Tests", () => {
             return undefined;
         };
 
-        const mockRepo1 = createMockRepository("c:/projects/repo1");
-        const mockRepo2 = createMockRepository("c:/projects/repo2");
+        const mockRepo1 = createMockRepository("/projects/repo1");
+        const mockRepo2 = createMockRepository("/projects/repo2");
         (vscode.extensions as any).getExtension = () => createMockGitExtension([mockRepo1, mockRepo2]);
 
         // Files from different repositories
-        const resourceState1 = createMockResourceState("c:/projects/repo1/file1.ts");
-        const resourceState2 = createMockResourceState("c:/projects/repo2/file2.ts");
+        const resourceState1 = createMockResourceState("/projects/repo1/file1.ts");
+        const resourceState2 = createMockResourceState("/projects/repo2/file2.ts");
 
         await quickCommit(resourceState1, [resourceState1, resourceState2]);
 
         assert.strictEqual(errorMessage, "Selected files must be from the same repository.");
     });
 
-    test("should not commit when user cancels input box", async () => {
+    test("should not stage or commit when user cancels input box", async () => {
         let addCalled = false;
         let commitCalled = false;
 
         const mockRepo = createMockRepository(
-            "c:/projects/repo1",
+            "/projects/repo1",
             async () => { addCalled = true; },
             async () => { commitCalled = true; }
         );
@@ -169,7 +169,7 @@ suite("QuickCommit Tests", () => {
 
         vscode.window.showInputBox = async () => undefined; // User cancels
 
-        const resourceState = createMockResourceState("c:/projects/repo1/file.ts");
+        const resourceState = createMockResourceState("/projects/repo1/file.ts");
 
         await quickCommit(resourceState, [resourceState]);
 
@@ -183,7 +183,7 @@ suite("QuickCommit Tests", () => {
         let infoMessage = "";
 
         const mockRepo = createMockRepository(
-            "c:/projects/repo1",
+            "/projects/repo1",
             async (paths: string[]) => { addedPaths = paths; },
             async (message: string) => { commitMessage = message; }
         );
@@ -195,7 +195,7 @@ suite("QuickCommit Tests", () => {
             return undefined;
         };
 
-        const resourceState = createMockResourceState("c:/projects/repo1/file.ts");
+        const resourceState = createMockResourceState("/projects/repo1/file.ts");
 
         await quickCommit(resourceState, [resourceState]);
 
@@ -210,7 +210,7 @@ suite("QuickCommit Tests", () => {
         let infoMessage = "";
 
         const mockRepo = createMockRepository(
-            "c:/projects/repo1",
+            "/projects/repo1",
             async (paths: string[]) => { addedPaths = paths; },
             async (message: string) => { commitMessage = message; }
         );
@@ -222,9 +222,9 @@ suite("QuickCommit Tests", () => {
             return undefined;
         };
 
-        const resourceState1 = createMockResourceState("c:/projects/repo1/file1.ts");
-        const resourceState2 = createMockResourceState("c:/projects/repo1/file2.ts");
-        const resourceState3 = createMockResourceState("c:/projects/repo1/src/file3.ts");
+        const resourceState1 = createMockResourceState("/projects/repo1/file1.ts");
+        const resourceState2 = createMockResourceState("/projects/repo1/file2.ts");
+        const resourceState3 = createMockResourceState("/projects/repo1/src/file3.ts");
 
         await quickCommit(resourceState1, [resourceState1, resourceState2, resourceState3]);
 
@@ -237,7 +237,7 @@ suite("QuickCommit Tests", () => {
         let errorMessage = "";
 
         const mockRepo = createMockRepository(
-            "c:/projects/repo1",
+            "/projects/repo1",
             async () => {},
             async () => { throw new Error("Commit failed: nothing to commit"); }
         );
@@ -249,7 +249,7 @@ suite("QuickCommit Tests", () => {
             return undefined;
         };
 
-        const resourceState = createMockResourceState("c:/projects/repo1/file.ts");
+        const resourceState = createMockResourceState("/projects/repo1/file.ts");
 
         await quickCommit(resourceState, [resourceState]);
 
@@ -261,7 +261,7 @@ suite("QuickCommit Tests", () => {
         let commitMessage = "";
 
         const mockRepo = createMockRepository(
-            "c:/projects/repo1",
+            "/projects/repo1",
             async (paths: string[]) => { addedPaths = paths; },
             async (message: string) => { commitMessage = message; }
         );
@@ -270,7 +270,7 @@ suite("QuickCommit Tests", () => {
         vscode.window.showInputBox = async () => "Single file commit";
         vscode.window.showInformationMessage = async () => undefined;
 
-        const resourceState = createMockResourceState("c:/projects/repo1/file.ts");
+        const resourceState = createMockResourceState("/projects/repo1/file.ts");
 
         // Pass only single resourceState without array (simulating single click)
         await quickCommit(resourceState);
@@ -283,7 +283,7 @@ suite("QuickCommit Tests", () => {
         let commitMessage = "";
 
         const mockRepo = createMockRepository(
-            "c:/projects/repo1",
+            "/projects/repo1",
             async () => {},
             async (message: string) => { commitMessage = message; }
         );
@@ -292,7 +292,7 @@ suite("QuickCommit Tests", () => {
         vscode.window.showInputBox = async () => "  Commit with spaces  ";
         vscode.window.showInformationMessage = async () => undefined;
 
-        const resourceState = createMockResourceState("c:/projects/repo1/file.ts");
+        const resourceState = createMockResourceState("/projects/repo1/file.ts");
 
         await quickCommit(resourceState, [resourceState]);
 

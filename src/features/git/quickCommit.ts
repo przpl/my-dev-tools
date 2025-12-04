@@ -25,10 +25,6 @@ interface Change {
     uri: vscode.Uri;
 }
 
-interface SourceControlResourceState extends vscode.SourceControlResourceState {
-    resourceUri: vscode.Uri;
-}
-
 function getGitAPI(): GitAPI | undefined {
     const gitExtension = vscode.extensions.getExtension<GitExtension>("vscode.git");
     if (!gitExtension) {
@@ -61,14 +57,14 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
 
     // Handle both single and multiple selection scenarios
     // VS Code passes: (clicked item, all selected items) for context menu
-    let resourceStates: SourceControlResourceState[] = [];
+    let resourceStates: vscode.SourceControlResourceState[] = [];
 
     if (args.length >= 2 && Array.isArray(args[1])) {
         // Multiple files selected - args[1] is the array of all selected items
-        resourceStates = args[1] as SourceControlResourceState[];
+        resourceStates = args[1].filter((s): s is vscode.SourceControlResourceState => !!s && typeof s === 'object' && 'resourceUri' in s);
     } else if (args.length >= 1 && args[0] && typeof args[0] === "object" && "resourceUri" in args[0]) {
         // Single file selected
-        resourceStates = [args[0] as SourceControlResourceState];
+        resourceStates = [args[0] as vscode.SourceControlResourceState];
     }
 
     if (resourceStates.length === 0) {
@@ -79,7 +75,7 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
     // Get unique URIs
     const uris = resourceStates.map((state) => state.resourceUri);
 
-    // Find the repository for the first file (assume all files are in the same repo)
+    // Use the repository for the first file as a starting point; validate all files are in the same repo below
     const repository = findRepositoryForUri(git, uris[0]);
     if (!repository) {
         vscode.window.showErrorMessage("Could not find Git repository for selected files.");

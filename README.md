@@ -57,8 +57,6 @@ This feature allows you to quickly stage and commit selected files from the Sour
 4. Enter your commit message in the input box
 5. The selected files will be staged and committed
 
-**Tip:** You can use GitHub Copilot's "Generate Commit Message" feature to help write your commit message. Simply click the sparkle icon in the commit message input or use the Copilot suggestions.
-
 ### Update Props Destructuring
 
 This feature helps keep your React component props up-to-date with their interface definitions:
