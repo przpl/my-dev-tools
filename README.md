@@ -41,6 +41,22 @@ Or add this to your `settings.json`:
 | Add undefined props to interface   | Command palette             | Detects undefined symbols used in JSX and adds them to the Props interface with smart type guessing.                                  |
 | Add className to React Props       | Command palette             | Adds `className?: string` to the Props interface. Creates Props interface if it doesn't exist.                                        |
 
+## Git
+
+| Option       | Available in                | Description                                                                                                  |
+| ------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Quick Commit | Source Control context menu | Right-click on one or multiple files in the Source Control panel to stage and commit them with a single action. |
+
+### Quick Commit
+
+This feature allows you to quickly stage and commit selected files from the Source Control panel:
+
+1. Open the Source Control panel (Ctrl+Shift+G)
+2. Right-click on one or more changed files
+3. Select "Quick Commit..." from the context menu
+4. Enter your commit message in the input box
+5. The selected files will be staged and committed
+
 ### Update Props Destructuring
 
 This feature helps keep your React component props up-to-date with their interface definitions:

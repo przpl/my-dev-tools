@@ -112,6 +112,10 @@
             {
                 "command": "myDevTools.autoRename",
                 "title": "Auto rename file"
+            },
+            {
+                "command": "myDevTools.quickCommit",
+                "title": "Quick Commit..."
             }
         ],
         "menus": {
@@ -156,7 +160,18 @@
                     "group": "rename"
                 }
             ],
+            "scm/resourceState/context": [
+                {
+                    "command": "myDevTools.quickCommit",
+                    "when": "scmProvider == git",
+                    "group": "1_modification"
+                }
+            ],
             "commandPalette": [
+                {
+                    "command": "myDevTools.quickCommit",
+                    "when": "false"
+                },
                 {
                     "command": "myDevTools.updatePropsDestructuring",
                     "when": "editorLangId == typescriptreact"
