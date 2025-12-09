@@ -7,6 +7,7 @@ suite("QuickCommit Tests", () => {
     let originalShowErrorMessage: typeof vscode.window.showErrorMessage;
     let originalShowInputBox: typeof vscode.window.showInputBox;
     let originalShowInformationMessage: typeof vscode.window.showInformationMessage;
+    let originalExecuteCommand: typeof vscode.commands.executeCommand;
 
     setup(() => {
         // Store original methods
@@ -14,6 +15,7 @@ suite("QuickCommit Tests", () => {
         originalShowErrorMessage = vscode.window.showErrorMessage;
         originalShowInputBox = vscode.window.showInputBox;
         originalShowInformationMessage = vscode.window.showInformationMessage;
+        originalExecuteCommand = vscode.commands.executeCommand;
     });
 
     teardown(() => {
@@ -22,6 +24,7 @@ suite("QuickCommit Tests", () => {
         vscode.window.showErrorMessage = originalShowErrorMessage;
         vscode.window.showInputBox = originalShowInputBox;
         vscode.window.showInformationMessage = originalShowInformationMessage;
+        vscode.commands.executeCommand = originalExecuteCommand;
     });
 
     function createMockGitExtension(repositories: any[]) {
@@ -38,13 +41,14 @@ suite("QuickCommit Tests", () => {
     function createMockRepository(
         rootPath: string,
         addFn?: (paths: string[]) => Promise<void>,
-        commitFn?: (message: string) => Promise<void>
+        commitFn?: (message: string) => Promise<void>,
+        indexChanges: any[] = []
     ) {
         return {
             rootUri: vscode.Uri.file(rootPath),
             state: {
                 workingTreeChanges: [],
-                indexChanges: [],
+                indexChanges: indexChanges,
                 mergeChanges: [],
             },
             add: addFn || (async () => {}),
@@ -194,6 +198,7 @@ suite("QuickCommit Tests", () => {
             infoMessage = message;
             return undefined;
         };
+        (vscode.commands as any).executeCommand = async () => undefined;
 
         const resourceState = createMockResourceState("/projects/repo1/file.ts");
 
@@ -221,6 +226,7 @@ suite("QuickCommit Tests", () => {
             infoMessage = message;
             return undefined;
         };
+        (vscode.commands as any).executeCommand = async () => undefined;
 
         const resourceState1 = createMockResourceState("/projects/repo1/file1.ts");
         const resourceState2 = createMockResourceState("/projects/repo1/file2.ts");
@@ -248,6 +254,7 @@ suite("QuickCommit Tests", () => {
             errorMessage = message;
             return undefined;
         };
+        (vscode.commands as any).executeCommand = async () => undefined;
 
         const resourceState = createMockResourceState("/projects/repo1/file.ts");
 
@@ -269,6 +276,7 @@ suite("QuickCommit Tests", () => {
 
         vscode.window.showInputBox = async () => "Single file commit";
         vscode.window.showInformationMessage = async () => undefined;
+        (vscode.commands as any).executeCommand = async () => undefined;
 
         const resourceState = createMockResourceState("/projects/repo1/file.ts");
 
@@ -291,11 +299,56 @@ suite("QuickCommit Tests", () => {
 
         vscode.window.showInputBox = async () => "  Commit with spaces  ";
         vscode.window.showInformationMessage = async () => undefined;
+        (vscode.commands as any).executeCommand = async () => undefined;
 
         const resourceState = createMockResourceState("/projects/repo1/file.ts");
 
         await quickCommit(resourceState, [resourceState]);
 
         assert.strictEqual(commitMessage, "Commit with spaces", "Should trim commit message");
+    });
+
+    test("should preserve previously staged files", async () => {
+        let addCalls: string[][] = [];
+        let commitMessage = "";
+        let unstageAllCalled = false;
+
+        // Mock repository with some files already staged
+        const previouslyStagedFile = { uri: vscode.Uri.file("/projects/repo1/already-staged.ts") };
+        const mockRepo = createMockRepository(
+            "/projects/repo1",
+            async (paths: string[]) => { addCalls.push(paths); },
+            async (message: string) => { commitMessage = message; },
+            [previouslyStagedFile] // Files already in index
+        );
+        (vscode.extensions as any).getExtension = () => createMockGitExtension([mockRepo]);
+
+        vscode.window.showInputBox = async () => "Commit selected file";
+        vscode.window.showInformationMessage = async () => undefined;
+        (vscode.commands as any).executeCommand = async (command: string) => {
+            if (command === "git.unstageAll") {
+                unstageAllCalled = true;
+            }
+            return undefined;
+        };
+
+        const resourceState = createMockResourceState("/projects/repo1/new-file.ts");
+
+        await quickCommit(resourceState, [resourceState]);
+
+        // Verify unstage was called (to clear previously staged files)
+        assert.strictEqual(unstageAllCalled, true, "Should call unstageAll");
+
+        // Verify add was called twice: once for selected file, once to restore previously staged
+        assert.strictEqual(addCalls.length, 2, "Should call add twice");
+        
+        // Normalize paths for cross-platform comparison
+        const normalizedFirstCall = addCalls[0].map(p => p.replace(/\\/g, '/'));
+        const normalizedSecondCall = addCalls[1].map(p => p.replace(/\\/g, '/'));
+        
+        assert.deepStrictEqual(normalizedFirstCall, ["/projects/repo1/new-file.ts"], "First add should be for selected file");
+        assert.deepStrictEqual(normalizedSecondCall, ["/projects/repo1/already-staged.ts"], "Second add should restore previously staged file");
+
+        assert.strictEqual(commitMessage, "Commit selected file", "Should commit with correct message");
     });
 });

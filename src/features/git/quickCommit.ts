@@ -12,7 +12,20 @@ interface Repository {
     rootUri: vscode.Uri;
     state: RepositoryState;
     add(paths: string[]): Promise<void>;
-    commit(message: string): Promise<void>;
+    commit(message: string, opts?: CommitOptions): Promise<void>;
+}
+
+interface CommitOptions {
+    all?: boolean | "tracked";
+    amend?: boolean;
+    signoff?: boolean;
+    signCommit?: boolean;
+    empty?: boolean;
+    noVerify?: boolean;
+    requireUserConfig?: boolean;
+    useEditor?: boolean;
+    verbose?: boolean;
+    postCommitCommand?: string;
 }
 
 interface RepositoryState {
@@ -111,12 +124,25 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
     }
 
     try {
-        // Stage the selected files (Git API expects string paths)
+        // Save currently staged files to restore them later
+        const previouslyStaged = repository.state.indexChanges.map((change) => change.uri.fsPath);
+
+        // Unstage everything first
+        if (previouslyStaged.length > 0) {
+            await vscode.commands.executeCommand("git.unstageAll");
+        }
+
+        // Stage only the selected files
         const paths = uris.map((uri) => uri.fsPath);
         await repository.add(paths);
 
-        // Commit with the message
+        // Commit only the staged files (the ones we just selected)
         await repository.commit(commitMessage.trim());
+
+        // Restore previously staged files (if any)
+        if (previouslyStaged.length > 0) {
+            await repository.add(previouslyStaged);
+        }
 
         const fileCount = uris.length;
         const fileWord = fileCount === 1 ? "file" : "files";
