@@ -252,13 +252,13 @@
         "@types/vscode": "^1.100.1",
         "@vscode/test-electron": "^2.5.2",
         "@vscode/vsce": "^3.7.1",
-        "esbuild": "^0.27.1",
+        "esbuild": "^0.27.2",
         "mocha": "^11.7.5",
         "rimraf": "^6.1.2",
         "typescript": "^5.9.3"
     },
     "dependencies": {
-        "es-toolkit": "^1.42.0",
+        "es-toolkit": "^1.43.0",
         "ts-morph": "^27.0.2"
     }
 }
