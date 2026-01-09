@@ -1,83 +1,77 @@
 import * as vscode from "vscode";
+import * as path from "path";
+import * as cp from "child_process";
+import { promisify } from "util";
 
-interface GitExtension {
-    getAPI(version: number): GitAPI;
+const execAsync = promisify(cp.exec);
+
+interface GitStatus {
+    staged: string[];
+    unstaged: string[];
 }
 
-interface GitAPI {
-    repositories: Repository[];
+async function execGit(cwd: string, args: string[]): Promise<string> {
+    try {
+        const { stdout } = await execAsync(`git ${args.join(" ")}`, { cwd });
+        return stdout.trim();
+    } catch (error: any) {
+        throw new Error(error.stderr || error.message);
+    }
 }
 
-interface Repository {
-    rootUri: vscode.Uri;
-    state: RepositoryState;
-    add(paths: string[]): Promise<void>;
-    commit(message: string, opts?: CommitOptions): Promise<void>;
-}
-
-interface CommitOptions {
-    all?: boolean | "tracked";
-    amend?: boolean;
-    signoff?: boolean;
-    signCommit?: boolean;
-    empty?: boolean;
-    noVerify?: boolean;
-    requireUserConfig?: boolean;
-    useEditor?: boolean;
-    verbose?: boolean;
-    postCommitCommand?: string;
-}
-
-interface RepositoryState {
-    workingTreeChanges: Change[];
-    indexChanges: Change[];
-    mergeChanges: Change[];
-}
-
-interface Change {
-    uri: vscode.Uri;
-}
-
-function getGitAPI(): GitAPI | undefined {
-    const gitExtension = vscode.extensions.getExtension<GitExtension>("vscode.git");
-    if (!gitExtension) {
-        vscode.window.showErrorMessage("Git extension not found.");
+async function findGitRoot(filePath: string): Promise<string | undefined> {
+    try {
+        const dir = path.dirname(filePath);
+        const { stdout } = await execAsync("git rev-parse --show-toplevel", { cwd: dir });
+        return stdout.trim();
+    } catch {
         return undefined;
     }
+}
 
-    if (!gitExtension.isActive) {
-        vscode.window.showErrorMessage("Git extension is not active.");
-        return undefined;
+async function getGitStatus(gitRoot: string): Promise<GitStatus> {
+    const status = await execGit(gitRoot, ["status", "--porcelain"]);
+    const staged: string[] = [];
+    const unstaged: string[] = [];
+
+    for (const line of status.split("\n")) {
+        if (!line) continue;
+
+        const stageStatus = line[0];
+        const workStatus = line[1];
+        const filePath = line.substring(3).trim();
+        const fullPath = path.join(gitRoot, filePath);
+
+        if (stageStatus !== " " && stageStatus !== "?") {
+            staged.push(fullPath);
+        }
+        if (workStatus !== " " || stageStatus === "?") {
+            unstaged.push(fullPath);
+        }
     }
 
-    return gitExtension.exports.getAPI(1);
+    return { staged, unstaged };
 }
 
-function findRepositoryForUri(git: GitAPI, uri: vscode.Uri): Repository | undefined {
-    return git.repositories.find((repo) => uri.fsPath.startsWith(repo.rootUri.fsPath));
-}
 
 export async function quickCommit(...args: unknown[]): Promise<void> {
-    const git = getGitAPI();
-    if (!git) {
-        return;
-    }
-
-    if (git.repositories.length === 0) {
-        vscode.window.showErrorMessage("No Git repositories found.");
-        return;
-    }
-
-    // Handle both single and multiple selection scenarios
-    // VS Code passes: (clicked item, all selected items) for context menu
+    // Handle different invocation scenarios from SCM context menus
     let resourceStates: vscode.SourceControlResourceState[] = [];
 
-    if (args.length >= 2 && Array.isArray(args[1])) {
-        // Multiple files selected - args[1] is the array of all selected items
-        resourceStates = args[1].filter((s): s is vscode.SourceControlResourceState => !!s && typeof s === 'object' && 'resourceUri' in s);
-    } else if (args.length >= 1 && args[0] && typeof args[0] === "object" && "resourceUri" in args[0]) {
-        // Single file selected
-        resourceStates = [args[0] as vscode.SourceControlResourceState];
+    // VS Code passes multiple selected resources as separate arguments, not as an array
+    // Each argument is a resource state object with resourceUri property
+    for (const arg of args) {
+        if (arg && typeof arg === 'object') {
+            // Check if it's a resource group (has resourceStates property)
+            if ('resourceStates' in arg) {
+                const group = arg as vscode.SourceControlResourceGroup;
+                resourceStates.push(...group.resourceStates);
+            }
+            // Check if it's a resource state (has resourceUri property)
+            else if ('resourceUri' in arg) {
+                resourceStates.push(arg as vscode.SourceControlResourceState);
+            }
+        }
     }
 
     if (resourceStates.length === 0) {
@@ -85,22 +79,25 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
         return;
     }
 
-    // Get unique URIs
-    const uris = resourceStates.map((state) => state.resourceUri);
+    // Get unique URIs and convert to file paths
+    const filePaths = [...new Set(resourceStates.map((state) => state.resourceUri.fsPath))];
 
-    // Use the repository for the first file as a starting point; validate all files are in the same repo below
-    const repository = findRepositoryForUri(git, uris[0]);
-    if (!repository) {
+    // Find Git root for the first file
+    const gitRoot = await findGitRoot(filePaths[0]);
+    if (!gitRoot) {
         vscode.window.showErrorMessage("Could not find Git repository for selected files.");
         return;
     }
 
     // Verify all files belong to the same repository
-    const allSameRepo = uris.every((uri) => {
-        const repo = findRepositoryForUri(git, uri);
-        return repo && repo.rootUri.fsPath === repository.rootUri.fsPath;
-    });
-    if (!allSameRepo) {
+    const allSameRepo = await Promise.all(
+        filePaths.map(async (filePath) => {
+            const root = await findGitRoot(filePath);
+            return root === gitRoot;
+        })
+    );
+
+    if (!allSameRepo.every(Boolean)) {
         vscode.window.showErrorMessage("Selected files must be from the same repository.");
         return;
     }
@@ -124,27 +121,42 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
     }
 
     try {
-        // Save currently staged files to restore them later
-        const previouslyStaged = repository.state.indexChanges.map((change) => change.uri.fsPath);
+        // Get current git status
+        const gitStatus = await getGitStatus(gitRoot);
 
-        // Unstage everything first
-        if (previouslyStaged.length > 0) {
-            await vscode.commands.executeCommand("git.unstageAll");
+        // Determine which files need staging
+        const filesToStage: string[] = [];
+        const alreadyStagedSelected: string[] = [];
+
+        for (const filePath of filePaths) {
+            if (gitStatus.staged.includes(filePath)) {
+                alreadyStagedSelected.push(filePath);
+            } else {
+                filesToStage.push(filePath);
+            }
         }
 
-        // Stage only the selected files
-        const paths = uris.map((uri) => uri.fsPath);
-        await repository.add(paths);
-
-        // Commit only the staged files (the ones we just selected)
-        await repository.commit(commitMessage.trim());
-
-        // Restore previously staged files (if any)
-        if (previouslyStaged.length > 0) {
-            await repository.add(previouslyStaged);
+        // Stage files that aren't already staged
+        if (filesToStage.length > 0) {
+            const relativePaths = filesToStage.map(fp => path.relative(gitRoot, fp));
+            await execGit(gitRoot, ["add", ...relativePaths]);
         }
 
-        const fileCount = uris.length;
+        // Get list of files that were staged before (excluding our selection)
+        const otherStaged = gitStatus.staged.filter(f => !filePaths.includes(f));
+
+        // Commit only the selected files
+        const allSelectedRelativePaths = filePaths.map(fp => path.relative(gitRoot, fp));
+        await execGit(gitRoot, ["commit", "-m", commitMessage.trim(), "--", ...allSelectedRelativePaths]);
+
+        // If there were other staged files, restore them to staged state
+        // (git commit -- <files> removes them from stage if they weren't part of commit)
+        if (otherStaged.length > 0) {
+            const otherRelativePaths = otherStaged.map(fp => path.relative(gitRoot, fp));
+            await execGit(gitRoot, ["add", ...otherRelativePaths]);
+        }
+
+        const fileCount = filePaths.length;
         const fileWord = fileCount === 1 ? "file" : "files";
         vscode.window.showInformationMessage(`Quick Commit: Successfully committed ${fileCount} ${fileWord}.`);
     } catch (error) {
