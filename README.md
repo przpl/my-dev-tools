@@ -14,6 +14,7 @@ If there is a larger group of common functions in the extension then this will b
 | Add to exports in index.ts | Command palette                     | Add selected symbol to exports in nearest index.ts. If no symbol is selected then everything will be exported (export \*)  |
 | Rename to...               | File context menu / Command palette | Rename file to camelCase, PascalCase, snake_case or kebab-case.                                                            |
 | Auto rename                | File context menu / Command palette | Automatically rename file based on exported symbols (class, function, interface, etc.). Uses configurable naming strategy. |
+| Toggle File Visibility     | Explorer toolbar                    | Toggle visibility of files in Explorer based on workspace `files.exclude` patterns. Eye icon appears when patterns exist.   |
 
 ### Auto Rename
 
@@ -31,6 +32,28 @@ Or add this to your `settings.json`:
 ```json
 "myDevTools.autoRenameStrategy": "kebab-case"
 ```
+
+### Toggle File Visibility
+
+This feature allows you to quickly hide or show files in the Explorer based on your workspace `files.exclude` settings:
+
+**How it works:**
+1. Configure patterns in your workspace settings (`.vscode/settings.json`):
+   ```json
+   {
+     "files.exclude": {
+       "**/node_modules": false,
+       "**/dist": false,
+       "**/.git": false
+     }
+   }
+   ```
+2. An eye icon appears in the Explorer toolbar when patterns exist
+3. Click the icon to toggle between hiding and showing the configured files
+   - Eye icon (open): Files are visible, click to hide
+   - Eye-closed icon: Files are hidden, click to show
+
+**Note:** The icon only appears when you have `files.exclude` patterns configured in your workspace settings. If no patterns exist, the icon won't be shown.
 
 ## React
 

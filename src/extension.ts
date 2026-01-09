@@ -13,6 +13,7 @@ import { addPropsToComponent } from "./features/react/addPropsToComponent";
 import { addUndefinedPropsToInterface } from "./features/react/addUndefinedPropsToInterface";
 import { renameToCamelCase, renameToPascalCase, renameToSnakeCase, renameToKebabCase, autoRename } from "./features/renameFile";
 import { quickCommit } from "./features/git/quickCommit";
+import { registerExplorerFileVisibility } from "./features/explorer/toggleFileVisibility";
 
 export function activate(context: vscode.ExtensionContext) {
     // Generic
@@ -36,6 +37,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Git
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.quickCommit", quickCommit));
+
+    // Explorer
+    const explorerCommands = registerExplorerFileVisibility(context);
+    explorerCommands.forEach(cmd => context.subscriptions.push(cmd));
 }
 
 export function activateUpdatePropsDestructuring(context: vscode.ExtensionContext) {

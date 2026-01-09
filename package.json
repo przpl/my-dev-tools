@@ -27,6 +27,9 @@
         "typescript",
         "nestjs"
     ],
+    "activationEvents": [
+        "onStartupFinished"
+    ],
     "main": "./out/extension.js",
     "contributes": {
         "configuration": {
@@ -116,9 +119,31 @@
             {
                 "command": "myDevTools.quickCommit",
                 "title": "Quick Commit..."
+            },
+            {
+                "command": "myDevTools.showExplorerFiles",
+                "title": "Show Hidden Files in Explorer",
+                "icon": "$(eye)"
+            },
+            {
+                "command": "myDevTools.hideExplorerFiles",
+                "title": "Hide Files in Explorer",
+                "icon": "$(eye-closed)"
             }
         ],
         "menus": {
+            "view/title": [
+                {
+                    "command": "myDevTools.showExplorerFiles",
+                    "when": "view == workbench.explorer.fileView && myDevTools.explorerPatternsExist && myDevTools.explorerFilesHidden",
+                    "group": "navigation"
+                },
+                {
+                    "command": "myDevTools.hideExplorerFiles",
+                    "when": "view == workbench.explorer.fileView && myDevTools.explorerPatternsExist && !myDevTools.explorerFilesHidden",
+                    "group": "navigation"
+                }
+            ],
             "explorer/context": [
                 {
                     "submenu": "NestJsToolsSubmenu",
