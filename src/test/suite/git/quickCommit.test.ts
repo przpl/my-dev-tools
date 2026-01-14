@@ -105,9 +105,13 @@ suite("QuickCommit Tests", () => {
         await quickCommit(newFile);
 
         const addCommands = gitCommands.filter(cmd => cmd.includes("git add"));
-        // Should add new-file.ts, then re-add already-staged.ts after commit
-        assert.strictEqual(addCommands.length, 2, "Should call git add twice to restore staged files");
-        assert.ok(addCommands[1].includes("already-staged.ts"), "Should restore previously staged file");
+        // Should only add new-file.ts since already-staged.ts stays in staging area
+        // Note: git commit -- <files> does NOT unstage other files, so no need to re-add
+        assert.strictEqual(addCommands.length, 1, "Should call git add once for the new file");
+        assert.ok(addCommands[0].includes("new-file.ts"), "Should stage the selected file");
+
+        const commitCommand = gitCommands.find(cmd => cmd.includes("git commit"));
+        assert.ok(commitCommand?.includes("new-file.ts"), "Should commit only the selected file");
     });
 
     test("should handle commit errors", async () => {
@@ -191,4 +195,38 @@ suite("QuickCommit Tests", () => {
         assert.ok(infoMessage.includes("3 files"), "Should show correct file count");
         assert.ok(infoMessage.includes("Successfully committed"), "Should show success message");
     });
+
+    test("should properly escape commit messages with spaces", async () => {
+        const gitRoot = path.normalize("/projects/repo1");
+        let commitCommand = "";
+
+        mockExecImpl = (cmd: string, options: any, callback: any) => {
+            if (cmd.includes("rev-parse --show-toplevel")) {
+                callback(null, { stdout: gitRoot, stderr: "" });
+            } else if (cmd.includes("status --porcelain")) {
+                callback(null, { stdout: " M file.ts\n", stderr: "" });
+            } else if (cmd.includes("git commit")) {
+                commitCommand = cmd;
+                callback(null, { stdout: "", stderr: "" });
+            } else {
+                callback(null, { stdout: "", stderr: "" });
+            }
+        };
+
+        vscode.window.showInputBox = async () => "update list of files to hide";
+        vscode.window.showInformationMessage = async () => undefined;
+
+        const file = createMockResourceState(path.join(gitRoot, "file.ts"));
+        await quickCommit(file);
+
+        // Verify the commit message is wrapped in quotes as a single argument
+        assert.ok(commitCommand.includes('"update list of files to hide"'),
+            "Commit message with spaces should be wrapped in quotes");
+
+        // Verify it doesn't split the message into multiple arguments
+        assert.ok(!commitCommand.match(/git.*-m\s+"update"\s+"list"/),
+            "Commit message should not be split into multiple arguments");
+    });
 });
+
+

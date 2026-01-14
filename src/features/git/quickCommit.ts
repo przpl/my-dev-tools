@@ -10,9 +10,19 @@ interface GitStatus {
     unstaged: string[];
 }
 
+function escapeShellArg(arg: string): string {
+    // Escape double quotes and wrap in double quotes
+    return `"${arg.replace(/"/g, '\\"')}"`;
+}
+
 async function execGit(cwd: string, args: string[]): Promise<string> {
     try {
-        const { stdout } = await execAsync(`git ${args.join(" ")}`, { cwd });
+        // First arg is the git command (status, add, commit, etc) - don't escape it
+        // Remaining args may contain spaces or special chars - escape them
+        const command = args[0];
+        const escapedArgs = args.slice(1).map(arg => escapeShellArg(arg)).join(" ");
+        const fullCommand = escapedArgs ? `git ${command} ${escapedArgs}` : `git ${command}`;
+        const { stdout } = await execAsync(fullCommand, { cwd });
         return stdout.trim();
     } catch (error: any) {
         throw new Error(error.stderr || error.message);
@@ -142,19 +152,10 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
             await execGit(gitRoot, ["add", ...relativePaths]);
         }
 
-        // Get list of files that were staged before (excluding our selection)
-        const otherStaged = gitStatus.staged.filter(f => !filePaths.includes(f));
-
         // Commit only the selected files
+        // Note: git commit -- <files> commits only specified files and leaves other staged files in the staging area
         const allSelectedRelativePaths = filePaths.map(fp => path.relative(gitRoot, fp));
         await execGit(gitRoot, ["commit", "-m", commitMessage.trim(), "--", ...allSelectedRelativePaths]);
-
-        // If there were other staged files, restore them to staged state
-        // (git commit -- <files> removes them from stage if they weren't part of commit)
-        if (otherStaged.length > 0) {
-            const otherRelativePaths = otherStaged.map(fp => path.relative(gitRoot, fp));
-            await execGit(gitRoot, ["add", ...otherRelativePaths]);
-        }
 
         const fileCount = filePaths.length;
         const fileWord = fileCount === 1 ? "file" : "files";
