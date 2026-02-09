@@ -11,10 +11,10 @@ import { autoRename } from "../../features/renameFile";
  */
 function extractRenameTargetFilename(edit: vscode.WorkspaceEdit): string | undefined {
     const editAny = edit as any;
-    
+
     // The internal structure uses minified property 'a' for the edits array
     const edits = editAny.a || editAny._edits;
-    
+
     if (edits && Array.isArray(edits)) {
         for (const operation of edits) {
             // Rename operations have 'to' property with the target URI
@@ -26,7 +26,7 @@ function extractRenameTargetFilename(edit: vscode.WorkspaceEdit): string | undef
             }
         }
     }
-    
+
     return undefined;
 }
 
@@ -44,7 +44,7 @@ suite("RenameFile Tests", () => {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vscode-test-"));
 
         // Mock configuration to return default values
-        vscode.workspace.getConfiguration = (section?: string) => {
+        vscode.workspace.getConfiguration = () => {
             const mockConfig = {
                 get: <T>(key: string, defaultValue?: T): T => {
                     if (key === "autoRenameStrategy") {
@@ -70,7 +70,7 @@ suite("RenameFile Tests", () => {
             fs.unlinkSync(testFilePath);
         }
         if (tempDir && fs.existsSync(tempDir)) {
-            fs.rmdirSync(tempDir);
+            fs.rmSync(tempDir, { recursive: true, force: true });
         }
 
         // Restore original activeTextEditor property
@@ -220,7 +220,7 @@ export interface UserData {
 
     test("should use camelCase when configured", async () => {
         // Override the mock configuration for this specific test
-        vscode.workspace.getConfiguration = (section?: string) => {
+        vscode.workspace.getConfiguration = () => {
             const mockConfig = {
                 get: <T>(key: string, defaultValue?: T): T => {
                     if (key === "autoRenameStrategy") {
@@ -338,7 +338,7 @@ export class MyClass {
 
     test("should use PascalCase when configured", async () => {
         // Override the mock configuration for this specific test
-        vscode.workspace.getConfiguration = (section?: string) => {
+        vscode.workspace.getConfiguration = () => {
             const mockConfig = {
                 get: <T>(key: string, defaultValue?: T): T => {
                     if (key === "autoRenameStrategy") {
@@ -377,7 +377,7 @@ export class MyClass {
 
     test("should use snake_case when configured", async () => {
         // Override the mock configuration for this specific test
-        vscode.workspace.getConfiguration = (section?: string) => {
+        vscode.workspace.getConfiguration = () => {
             const mockConfig = {
                 get: <T>(key: string, defaultValue?: T): T => {
                     if (key === "autoRenameStrategy") {
@@ -427,7 +427,6 @@ export function useCustomHook() {
         const originalShowQuickPick = vscode.window.showQuickPick;
         vscode.window.showQuickPick = async <T extends vscode.QuickPickItem>(
             items: readonly T[] | Thenable<readonly T[]>,
-            options?: vscode.QuickPickOptions
         ): Promise<T | undefined> => {
             const resolvedItems = await Promise.resolve(items);
             quickPickItems = [...resolvedItems] as vscode.QuickPickItem[];

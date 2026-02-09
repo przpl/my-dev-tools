@@ -3,6 +3,7 @@ import { InterfaceDeclaration, SyntaxKind } from "ts-morph";
 import * as vscode from "vscode";
 
 import { addToExportsInIndex } from "./features/addToExportsInIndex";
+import { convertEolToLf } from "./features/convertEolToLf";
 import { openNearestFile } from "./features/openNearestFile";
 import { updatePropsDestructuring } from "./features/react/updatePropsDestructuring";
 import { Config } from "./utils/config";
@@ -19,6 +20,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Generic
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.openNearestIndex", () => openNearestFile("index.ts")));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.addToExportsInIndex", addToExportsInIndex));
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.convertEolToLf", convertEolToLf));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.renameToCamelCase", renameToCamelCase));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.renameToPascalCase", renameToPascalCase));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.renameToSnakeCase", renameToSnakeCase));

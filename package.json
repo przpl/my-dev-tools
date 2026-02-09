@@ -69,6 +69,10 @@
                 "title": "Add to exports in index.ts"
             },
             {
+                "command": "myDevTools.convertEolToLf",
+                "title": "Convert EOL to LF"
+            },
+            {
                 "command": "myDevTools.updatePropsDestructuring",
                 "title": "Update React Props destructuring"
             },
