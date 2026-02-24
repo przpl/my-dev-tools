@@ -25,6 +25,7 @@ export async function addPropsToComponent() {
     try {
         // Add empty Props interface
         const propsInterface = ReactUtils.findOrCreatePropsInterface(context.sourceFile, componentFunction);
+        const hasEmptyPropsInterface = propsInterface.getMembers().length === 0;
 
         // Add parameter to component function
         componentFunction.addParameter({
@@ -32,9 +33,25 @@ export async function addPropsToComponent() {
             type: propsInterface.getName(),
         });
 
-        // Get position before cleanup
-        const propsInterfacePos = propsInterface.getPos() + `interface ${propsInterface.getName()} {`.length;
-        const updatedText = context.sourceFile.getFullText();
+        const interfaceStart = propsInterface.getStart();
+        const interfaceEnd = propsInterface.getEnd();
+        const eol = context.document.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n";
+        const interfaceHeader = `interface ${propsInterface.getName()} {`;
+
+        let updatedText = context.sourceFile.getFullText();
+        let propsInterfacePos = interfaceStart;
+
+        const interfaceText = updatedText.slice(interfaceStart, interfaceEnd);
+        const isSingleLineEmpty = /\{\s*\}/.test(interfaceText);
+
+        if (hasEmptyPropsInterface && isSingleLineEmpty) {
+            const multilineInterface = `${interfaceHeader}${eol}    ${eol}}`;
+            updatedText = `${updatedText.slice(0, interfaceStart)}${multilineInterface}${updatedText.slice(interfaceEnd)}`;
+            propsInterfacePos = interfaceStart + interfaceHeader.length + eol.length + 4;
+        } else {
+            const openBracePos = updatedText.indexOf("{", interfaceStart);
+            propsInterfacePos = openBracePos >= 0 ? openBracePos + 1 : interfaceStart;
+        }
 
         await VsCodeUtils.applyChangesToWorkspace(context, updatedText);
 

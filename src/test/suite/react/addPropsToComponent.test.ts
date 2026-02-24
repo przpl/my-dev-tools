@@ -111,6 +111,37 @@ function MyComponent() {
         );
     });
 
+    test("should place cursor inside empty Props interface", async () => {
+        const initialCode = `function MyComponent() {
+    return <div>Hello World</div>;
+}`;
+
+        await testEditor.edit((editBuilder) => {
+            editBuilder.insert(new vscode.Position(0, 0), initialCode);
+        });
+
+        await addPropsToComponent();
+
+        const editor = vscode.window.activeTextEditor;
+        assert.ok(editor, "Should have an active editor");
+
+        const updatedContent = testDocument.getText();
+        const interfaceStart = updatedContent.indexOf("interface Props");
+        const openBrace = updatedContent.indexOf("{", interfaceStart);
+        const closeBrace = updatedContent.indexOf("}", openBrace);
+        const cursorOffset = testDocument.offsetAt(editor!.selection.active);
+        const cursorPosition = editor!.selection.active;
+        const interfaceLine = testDocument.positionAt(interfaceStart).line;
+
+        assert.ok(interfaceStart >= 0, "Should contain Props interface");
+        assert.ok(openBrace >= 0 && closeBrace >= 0, "Should contain interface braces");
+        assert.ok(/interface Props \{\r?\n\s{4}\r?\n\}/.test(updatedContent), "Should format empty Props interface as multiline with indentation");
+        assert.ok(cursorOffset > openBrace, "Cursor should be after opening brace");
+        assert.ok(cursorOffset <= closeBrace, "Cursor should be inside interface body");
+        assert.strictEqual(cursorPosition.line, interfaceLine + 1, "Cursor should be on line inside interface body");
+        assert.strictEqual(cursorPosition.character, 4, "Cursor should be at body indentation level");
+    });
+
     test("should work with function declaration style components", async () => {
         const initialCode = `export function MyComponent() {
     return <div>Hello World</div>;
