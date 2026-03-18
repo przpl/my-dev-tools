@@ -67,6 +67,15 @@ suite("ConvertEolToLf Tests", () => {
         }
     }
 
+    async function createBinaryFile(relativePath: string, content: Buffer): Promise<void> {
+        const fullPath = path.join(tempDir, relativePath);
+        const dir = path.dirname(fullPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(fullPath, content);
+    }
+
     test("should show error when no workspace folder is open", async () => {
         Object.defineProperty(vscode.workspace, "workspaceFolders", {
             value: undefined,
@@ -316,5 +325,41 @@ suite("ConvertEolToLf Tests", () => {
 
         assert.ok(warningMessage.includes("1 file(s) converted"), "Should report converted file");
         assert.ok(warningMessage.includes("1 error(s)"), "Should report error count");
+    });
+
+    test("should skip binary files and only update text files", async () => {
+        await createFileStructure({
+            "text.txt": "line1\r\nline2\r\n",
+        });
+        const binaryContent = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+        await createBinaryFile("image.png", binaryContent);
+
+        const textFile = vscode.Uri.file(path.join(tempDir, "text.txt"));
+        const imageFile = vscode.Uri.file(path.join(tempDir, "image.png"));
+
+        vscode.window.showInputBox = async () => "*";
+        vscode.workspace.findFiles = async () => [textFile, imageFile];
+
+        let infoMessage = "";
+        vscode.window.showInformationMessage = async (message: string) => {
+            infoMessage = message;
+            return undefined;
+        };
+
+        (vscode.window.withProgress as any) = async (_: any, task: any) => {
+            const progress = { report: () => {} };
+            const token = {
+                isCancellationRequested: false,
+                onCancellationRequested: () => ({ dispose: () => {} }),
+            };
+            return await task(progress, token);
+        };
+
+        await convertEolToLf();
+
+        assert.strictEqual(fs.readFileSync(textFile.fsPath, "utf-8"), "line1\nline2\n");
+        const updatedBinaryContent = fs.readFileSync(imageFile.fsPath);
+        assert.ok(updatedBinaryContent.equals(binaryContent), "Binary file should be unchanged");
+        assert.ok(infoMessage.includes("1 binary file(s) skipped"), "Should report skipped binary files");
     });
 });

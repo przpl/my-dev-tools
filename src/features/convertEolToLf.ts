@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "fs/promises";
+import { isText } from "istextorbinary";
 import * as vscode from "vscode";
 
 export async function convertEolToLf() {
@@ -35,6 +36,8 @@ export async function convertEolToLf() {
             },
             async (progress, token) => {
                 let convertedCount = 0;
+                let unchangedCount = 0;
+                let skippedBinaryCount = 0;
                 let errorCount = 0;
                 const errors: string[] = [];
 
@@ -53,13 +56,21 @@ export async function convertEolToLf() {
                     try {
                         const content = await readFile(file.fsPath, "utf-8");
 
-                        if (content.includes("\r")) {
-                            const converted = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-                            await writeFile(file.fsPath, converted, "utf-8");
-                            convertedCount++;
+                        if (!isText(file.fsPath)) {
+                            skippedBinaryCount++;
+                            continue;
                         }
+
+                        if (!content.includes("\r")) {
+                            unchangedCount++;
+                            continue;
+                        }
+
+                        const converted = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+                        await writeFile(file.fsPath, converted, "utf-8");
+                        convertedCount++;
                     } catch (err) {
-                        // Skip binary files or files with read errors
+                        // Handle files with read or write errors
                         errorCount++;
                         if (errors.length < 10) {
                             errors.push(`${file.fsPath}: ${err instanceof Error ? err.message : String(err)}`);
@@ -68,7 +79,10 @@ export async function convertEolToLf() {
                 }
 
                 // Show results
-                const message = `EOL conversion complete: ${convertedCount} file(s) converted, ${files.length - convertedCount - errorCount} file(s) unchanged`;
+                let message = `EOL conversion complete: ${convertedCount} file(s) converted, ${unchangedCount} file(s) unchanged`;
+                if (skippedBinaryCount > 0) {
+                    message += `, ${skippedBinaryCount} binary file(s) skipped`;
+                }
                 if (errorCount > 0) {
                     const errorMessage = `${message}, ${errorCount} error(s)`;
                     if (errors.length > 0) {
