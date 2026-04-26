@@ -73,6 +73,10 @@
                 "title": "Convert EOL to LF"
             },
             {
+                "command": "myDevTools.deleteEmptyDirectories",
+                "title": "Delete empty directories"
+            },
+            {
                 "command": "myDevTools.updatePropsDestructuring",
                 "title": "Update React Props destructuring"
             },
@@ -288,6 +292,7 @@
     },
     "dependencies": {
         "es-toolkit": "^1.45.1",
+        "ignore": "^7.0.5",
         "istextorbinary": "^9.5.0",
         "ts-morph": "^27.0.2"
     }
