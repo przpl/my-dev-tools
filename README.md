@@ -13,6 +13,7 @@ If there is a larger group of common functions in the extension then this will b
 | Go to nearest index.ts     | Command palette                     | Open nearest index.ts file in one of the parent folders.                                                                   |
 | Add to exports in index.ts | Command palette                     | Add selected symbol to exports in nearest index.ts. If no symbol is selected then everything will be exported (export \*)  |
 | Convert EOL to LF          | Command palette                     | Convert line endings from CRLF/CR to LF for files matching a glob pattern. Prompts for pattern (default: `**/*`).          |
+| Delete empty directories   | Command palette                     | Recursively finds and deletes all empty directories in the workspace. Directories containing any file are skipped. Directories matching `.gitignore` patterns (e.g. `node_modules`) are skipped. |
 | Rename to...               | File context menu / Command palette | Rename file to camelCase, PascalCase, snake_case or kebab-case.                                                            |
 | Auto rename                | File context menu / Command palette | Automatically rename file based on exported symbols (class, function, interface, etc.). Uses configurable naming strategy. |
 | Toggle File Visibility     | Explorer toolbar                    | Toggle visibility of files in Explorer based on workspace `files.exclude` patterns. Eye icon appears when patterns exist.  |
