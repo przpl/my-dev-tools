@@ -1,6 +1,7 @@
-import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { isText } from "istextorbinary";
 import * as vscode from "vscode";
+import { isFileGitignored, loadAllGitignoreRules } from "../utils/gitignoreUtils";
 
 export async function convertEolToLf() {
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -20,8 +21,11 @@ export async function convertEolToLf() {
     }
 
     try {
-        // Find all files matching the glob pattern
-        const files = await vscode.workspace.findFiles(globPattern, "**/node_modules/**");
+        const [allFiles, gitignoreRules] = await Promise.all([
+            vscode.workspace.findFiles(globPattern, "**/node_modules/**"),
+            loadAllGitignoreRules(),
+        ]);
+        const files = allFiles.filter(f => !isFileGitignored(f.fsPath, gitignoreRules));
 
         if (files.length === 0) {
             vscode.window.showInformationMessage("No files found matching the glob pattern");
@@ -35,6 +39,7 @@ export async function convertEolToLf() {
                 cancellable: true,
             },
             async (progress, token) => {
+                const skippedGitignoreCount = allFiles.length - files.length;
                 let convertedCount = 0;
                 let unchangedCount = 0;
                 let skippedBinaryCount = 0;
@@ -80,6 +85,9 @@ export async function convertEolToLf() {
 
                 // Show results
                 let message = `EOL conversion complete: ${convertedCount} file(s) converted, ${unchangedCount} file(s) unchanged`;
+                if (skippedGitignoreCount > 0) {
+                    message += `, ${skippedGitignoreCount} gitignored file(s) skipped`;
+                }
                 if (skippedBinaryCount > 0) {
                     message += `, ${skippedBinaryCount} binary file(s) skipped`;
                 }

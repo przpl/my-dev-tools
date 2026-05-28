@@ -1,23 +1,18 @@
-import * as vscode from "vscode";
 import ignore, { Ignore } from "ignore";
+import * as vscode from "vscode";
+import { readGitignore } from "../utils/gitignoreUtils";
 
 async function loadIgnoreForDir(dirUri: vscode.Uri): Promise<Ignore> {
     const ig = ignore();
-    try {
-        const gitignoreUri = vscode.Uri.joinPath(dirUri, ".gitignore");
-        const bytes = await vscode.workspace.fs.readFile(gitignoreUri);
-        const text = Buffer.from(bytes).toString("utf-8");
-
+    const content = await readGitignore(dirUri);
+    if (content) {
         // Strip trailing slashes: since we only ever test directory paths,
         // "cache/" and "cache" are identical in this context.
-        const normalized = text
+        const normalized = content
             .split("\n")
             .map(line => line.trimEnd().endsWith("/") ? line.trimEnd().slice(0, -1) : line)
             .join("\n");
-
         ig.add(normalized);
-    } catch {
-        // No .gitignore in this directory — that's fine
     }
     return ig;
 }

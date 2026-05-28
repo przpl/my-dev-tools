@@ -14,7 +14,6 @@ suite("ConvertEolToLf Tests", () => {
     let originalShowErrorMessage: typeof vscode.window.showErrorMessage;
     let originalWithProgress: typeof vscode.window.withProgress;
     let originalFindFiles: typeof vscode.workspace.findFiles;
-
     setup(async () => {
         // Create temporary directory structure for test files
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vscode-eol-test-"));
@@ -110,7 +109,10 @@ suite("ConvertEolToLf Tests", () => {
 
     test("should show message when no files found", async () => {
         vscode.window.showInputBox = async () => "**/*.nonexistent";
-        vscode.workspace.findFiles = async () => [];
+        vscode.workspace.findFiles = async (include: any) => {
+            if (include === "**/.gitignore") return [];
+            return [];
+        };
 
         let infoMessage = "";
         vscode.window.showInformationMessage = async (message: string) => {
@@ -132,7 +134,10 @@ suite("ConvertEolToLf Tests", () => {
         const testFile = vscode.Uri.file(path.join(tempDir, "test.txt"));
 
         vscode.window.showInputBox = async () => "test.txt";
-        vscode.workspace.findFiles = async () => [testFile];
+        vscode.workspace.findFiles = async (include: any) => {
+            if (include === "**/.gitignore") return [];
+            return [testFile];
+        };
 
         let infoMessage = "";
         vscode.window.showInformationMessage = async (message: string) => {
@@ -168,7 +173,10 @@ suite("ConvertEolToLf Tests", () => {
         const testFile = vscode.Uri.file(path.join(tempDir, "test.txt"));
 
         vscode.window.showInputBox = async () => "test.txt";
-        vscode.workspace.findFiles = async () => [testFile];
+        vscode.workspace.findFiles = async (include: any) => {
+            if (include === "**/.gitignore") return [];
+            return [testFile];
+        };
 
         vscode.window.showInformationMessage = async () => undefined;
 
@@ -196,7 +204,10 @@ suite("ConvertEolToLf Tests", () => {
         const testFile = vscode.Uri.file(path.join(tempDir, "test.txt"));
 
         vscode.window.showInputBox = async () => "test.txt";
-        vscode.workspace.findFiles = async () => [testFile];
+        vscode.workspace.findFiles = async (include: any) => {
+            if (include === "**/.gitignore") return [];
+            return [testFile];
+        };
 
         let infoMessage = "";
         vscode.window.showInformationMessage = async (message: string) => {
@@ -235,7 +246,10 @@ suite("ConvertEolToLf Tests", () => {
         ];
 
         vscode.window.showInputBox = async () => "*.txt";
-        vscode.workspace.findFiles = async () => files;
+        vscode.workspace.findFiles = async (include: any) => {
+            if (include === "**/.gitignore") return [];
+            return files;
+        };
 
         let infoMessage = "";
         vscode.window.showInformationMessage = async (message: string) => {
@@ -273,7 +287,10 @@ suite("ConvertEolToLf Tests", () => {
         ];
 
         vscode.window.showInputBox = async () => "*.txt";
-        vscode.workspace.findFiles = async () => files;
+        vscode.workspace.findFiles = async (include: any) => {
+            if (include === "**/.gitignore") return [];
+            return files;
+        };
 
         let warningMessage = "";
         vscode.window.showWarningMessage = async (message: string) => {
@@ -304,7 +321,10 @@ suite("ConvertEolToLf Tests", () => {
         const badFile = vscode.Uri.file(path.join(tempDir, "nonexistent.txt"));
 
         vscode.window.showInputBox = async () => "*.txt";
-        vscode.workspace.findFiles = async () => [goodFile, badFile];
+        vscode.workspace.findFiles = async (include: any) => {
+            if (include === "**/.gitignore") return [];
+            return [goodFile, badFile];
+        };
 
         let warningMessage = "";
         vscode.window.showWarningMessage = async (message: string, ..._: any[]) => {
@@ -327,6 +347,86 @@ suite("ConvertEolToLf Tests", () => {
         assert.ok(warningMessage.includes("1 error(s)"), "Should report error count");
     });
 
+    test("should skip files matching .gitignore patterns", async () => {
+        await createFileStructure({
+            "src/app.txt": "content\r\n",
+            "dist/bundle.txt": "content\r\n",
+            ".gitignore": "dist\n",
+        });
+
+        const srcFile = vscode.Uri.file(path.join(tempDir, "src/app.txt"));
+        const distFile = vscode.Uri.file(path.join(tempDir, "dist/bundle.txt"));
+        const gitignoreFile = vscode.Uri.file(path.join(tempDir, ".gitignore"));
+
+        vscode.window.showInputBox = async () => "**/*.txt";
+        vscode.workspace.findFiles = async (include: any) => {
+            if (include === "**/.gitignore") return [gitignoreFile];
+            return [srcFile, distFile];
+        };
+
+        let infoMessage = "";
+        vscode.window.showInformationMessage = async (message: string) => {
+            infoMessage = message;
+            return undefined;
+        };
+
+        (vscode.window.withProgress as any) = async (_: any, task: any) => {
+            const progress = { report: () => {} };
+            const token = {
+                isCancellationRequested: false,
+                onCancellationRequested: () => ({ dispose: () => {} }),
+            };
+            return await task(progress, token);
+        };
+
+        await convertEolToLf();
+
+        assert.strictEqual(fs.readFileSync(srcFile.fsPath, "utf-8"), "content\n", "Should convert non-ignored file");
+        assert.strictEqual(fs.readFileSync(distFile.fsPath, "utf-8"), "content\r\n", "Should not convert gitignored file");
+        assert.ok(infoMessage.includes("1 file(s) converted"), "Should report 1 file converted");
+        assert.ok(infoMessage.includes("1 gitignored file(s) skipped"), "Should report gitignored files");
+    });
+
+    test("should skip files matching nested .gitignore patterns", async () => {
+        await createFileStructure({
+            "src/app.txt": "content\r\n",
+            "src/generated/output.txt": "content\r\n",
+            "src/.gitignore": "generated\n",
+        });
+
+        const srcFile = vscode.Uri.file(path.join(tempDir, "src/app.txt"));
+        const generatedFile = vscode.Uri.file(path.join(tempDir, "src/generated/output.txt"));
+        const gitignoreFile = vscode.Uri.file(path.join(tempDir, "src/.gitignore"));
+
+        vscode.window.showInputBox = async () => "**/*.txt";
+        vscode.workspace.findFiles = async (include: any) => {
+            if (include === "**/.gitignore") return [gitignoreFile];
+            return [srcFile, generatedFile];
+        };
+
+        let infoMessage = "";
+        vscode.window.showInformationMessage = async (message: string) => {
+            infoMessage = message;
+            return undefined;
+        };
+
+        (vscode.window.withProgress as any) = async (_: any, task: any) => {
+            const progress = { report: () => {} };
+            const token = {
+                isCancellationRequested: false,
+                onCancellationRequested: () => ({ dispose: () => {} }),
+            };
+            return await task(progress, token);
+        };
+
+        await convertEolToLf();
+
+        assert.strictEqual(fs.readFileSync(srcFile.fsPath, "utf-8"), "content\n", "Should convert non-ignored file");
+        assert.strictEqual(fs.readFileSync(generatedFile.fsPath, "utf-8"), "content\r\n", "Should not convert file matching nested .gitignore");
+        assert.ok(infoMessage.includes("1 file(s) converted"), "Should report 1 file converted");
+        assert.ok(infoMessage.includes("1 gitignored file(s) skipped"), "Should report gitignored files");
+    });
+
     test("should skip binary files and only update text files", async () => {
         await createFileStructure({
             "text.txt": "line1\r\nline2\r\n",
@@ -338,7 +438,10 @@ suite("ConvertEolToLf Tests", () => {
         const imageFile = vscode.Uri.file(path.join(tempDir, "image.png"));
 
         vscode.window.showInputBox = async () => "*";
-        vscode.workspace.findFiles = async () => [textFile, imageFile];
+        vscode.workspace.findFiles = async (include: any) => {
+            if (include === "**/.gitignore") return [];
+            return [textFile, imageFile];
+        };
 
         let infoMessage = "";
         vscode.window.showInformationMessage = async (message: string) => {
