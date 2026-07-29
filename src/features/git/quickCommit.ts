@@ -1,66 +1,25 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import * as cp from "child_process";
-import { promisify } from "util";
 
-const execAsync = promisify(cp.exec);
+import { execGit, findGitRoot, toGitPath } from "./gitCli";
 
-interface GitStatus {
-    staged: string[];
-    unstaged: string[];
-}
-
-function escapeShellArg(arg: string): string {
-    // Escape double quotes and wrap in double quotes
-    return `"${arg.replace(/"/g, '\\"')}"`;
-}
-
-async function execGit(cwd: string, args: string[]): Promise<string> {
-    try {
-        // First arg is the git command (status, add, commit, etc) - don't escape it
-        // Remaining args may contain spaces or special chars - escape them
-        const command = args[0];
-        const escapedArgs = args.slice(1).map(arg => escapeShellArg(arg)).join(" ");
-        const fullCommand = escapedArgs ? `git ${command} ${escapedArgs}` : `git ${command}`;
-        const { stdout } = await execAsync(fullCommand, { cwd });
-        return stdout.trim();
-    } catch (error: any) {
-        throw new Error(error.stderr || error.message);
-    }
-}
-
-async function findGitRoot(filePath: string): Promise<string | undefined> {
-    try {
-        const dir = path.dirname(filePath);
-        const { stdout } = await execAsync("git rev-parse --show-toplevel", { cwd: dir });
-        return stdout.trim();
-    } catch {
-        return undefined;
-    }
-}
-
-async function getGitStatus(gitRoot: string): Promise<GitStatus> {
+/** Absolute paths of the files that currently have something in the index. */
+async function getStagedFiles(gitRoot: string): Promise<string[]> {
     const status = await execGit(gitRoot, ["status", "--porcelain"]);
     const staged: string[] = [];
-    const unstaged: string[] = [];
 
     for (const line of status.split("\n")) {
         if (!line) continue;
 
         const stageStatus = line[0];
-        const workStatus = line[1];
         const filePath = line.substring(3).trim();
-        const fullPath = path.join(gitRoot, filePath);
 
         if (stageStatus !== " " && stageStatus !== "?") {
-            staged.push(fullPath);
-        }
-        if (workStatus !== " " || stageStatus === "?") {
-            unstaged.push(fullPath);
+            staged.push(path.join(gitRoot, filePath));
         }
     }
 
-    return { staged, unstaged };
+    return staged;
 }
 
 
@@ -93,7 +52,7 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
     const filePaths = [...new Set(resourceStates.map((state) => state.resourceUri.fsPath))];
 
     // Find Git root for the first file
-    const gitRoot = await findGitRoot(filePaths[0]);
+    const gitRoot = await findGitRoot(path.dirname(filePaths[0]));
     if (!gitRoot) {
         vscode.window.showErrorMessage("Could not find Git repository for selected files.");
         return;
@@ -102,7 +61,7 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
     // Verify all files belong to the same repository
     const allSameRepo = await Promise.all(
         filePaths.map(async (filePath) => {
-            const root = await findGitRoot(filePath);
+            const root = await findGitRoot(path.dirname(filePath));
             return root === gitRoot;
         })
     );
@@ -131,31 +90,17 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
     }
 
     try {
-        // Get current git status
-        const gitStatus = await getGitStatus(gitRoot);
-
-        // Determine which files need staging
-        const filesToStage: string[] = [];
-        const alreadyStagedSelected: string[] = [];
-
-        for (const filePath of filePaths) {
-            if (gitStatus.staged.includes(filePath)) {
-                alreadyStagedSelected.push(filePath);
-            } else {
-                filesToStage.push(filePath);
-            }
-        }
+        const stagedFiles = await getStagedFiles(gitRoot);
 
         // Stage files that aren't already staged
+        const filesToStage = filePaths.filter(filePath => !stagedFiles.includes(filePath));
         if (filesToStage.length > 0) {
-            const relativePaths = filesToStage.map(fp => path.relative(gitRoot, fp));
-            await execGit(gitRoot, ["add", ...relativePaths]);
+            await execGit(gitRoot, ["add", "--", ...filesToStage.map(fp => toGitPath(gitRoot, fp))]);
         }
 
         // Commit only the selected files
         // Note: git commit -- <files> commits only specified files and leaves other staged files in the staging area
-        const allSelectedRelativePaths = filePaths.map(fp => path.relative(gitRoot, fp));
-        await execGit(gitRoot, ["commit", "-m", commitMessage.trim(), "--", ...allSelectedRelativePaths]);
+        await execGit(gitRoot, ["commit", "-m", commitMessage.trim(), "--", ...filePaths.map(fp => toGitPath(gitRoot, fp))]);
 
         const fileCount = filePaths.length;
         const fileWord = fileCount === 1 ? "file" : "files";

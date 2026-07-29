@@ -15,6 +15,8 @@ import { addPropsToComponent } from "./features/react/addPropsToComponent";
 import { addUndefinedPropsToInterface } from "./features/react/addUndefinedPropsToInterface";
 import { renameToCamelCase, renameToPascalCase, renameToSnakeCase, renameToKebabCase, autoRename } from "./features/renameFile";
 import { quickCommit } from "./features/git/quickCommit";
+import { stageActiveFile } from "./features/git/stageActiveFile";
+import { autoStage } from "./features/git/autoStage";
 import { registerExplorerFileVisibility } from "./features/explorer/toggleFileVisibility";
 
 export function activate(context: vscode.ExtensionContext) {
@@ -41,6 +43,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Git
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.quickCommit", quickCommit));
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.autoStage", autoStage));
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.stageActiveFile", stageActiveFile));
 
     // Explorer
     const explorerCommands = registerExplorerFileVisibility(context);

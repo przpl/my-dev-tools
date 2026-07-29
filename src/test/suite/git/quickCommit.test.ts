@@ -1,22 +1,24 @@
 import * as assert from "assert";
-import * as vscode from "vscode";
+import * as cp from "child_process";
+import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
-
-// Mock child_process before importing quickCommit
-const childProcessModule = require("child_process");
-const originalExec = childProcessModule.exec;
-let mockExecImpl: ((cmd: string, options: any, callback: any) => void) | null = null;
-
-childProcessModule.exec = function (cmd: string, options: any, callback: any) {
-    if (mockExecImpl) {
-        return mockExecImpl(cmd, options, callback);
-    }
-    return originalExec.apply(this, arguments);
-};
+import * as vscode from "vscode";
 
 import { quickCommit } from "../../../features/git/quickCommit";
 
+function git(cwd: string, args: string[]): string {
+    return cp.execFileSync("git", args, { cwd, stdio: "pipe", encoding: "utf8" });
+}
+
+function write(repo: string, relativePath: string, content: string): void {
+    const target = path.join(repo, relativePath);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content);
+}
+
 suite("QuickCommit Tests", () => {
+    let repo: string;
     let originalShowErrorMessage: typeof vscode.window.showErrorMessage;
     let originalShowInputBox: typeof vscode.window.showInputBox;
     let originalShowInformationMessage: typeof vscode.window.showInformationMessage;
@@ -25,208 +27,208 @@ suite("QuickCommit Tests", () => {
         originalShowErrorMessage = vscode.window.showErrorMessage;
         originalShowInputBox = vscode.window.showInputBox;
         originalShowInformationMessage = vscode.window.showInformationMessage;
+
+        repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "vscode-quick-commit-")));
+
+        git(repo, ["init", "-q", "."]);
+        git(repo, ["config", "user.email", "test@example.com"]);
+        git(repo, ["config", "user.name", "Test"]);
     });
 
     teardown(() => {
-        mockExecImpl = null;
         vscode.window.showErrorMessage = originalShowErrorMessage;
         vscode.window.showInputBox = originalShowInputBox;
         vscode.window.showInformationMessage = originalShowInformationMessage;
+
+        try {
+            fs.rmSync(repo, { recursive: true, force: true });
+        } catch {
+            // Windows can hold locks on the git directory; leaving the temp folder behind is harmless.
+        }
     });
 
-    function createMockResourceState(filePath: string): vscode.SourceControlResourceState {
-        return {
-            resourceUri: vscode.Uri.file(filePath),
+    function resource(relativePath: string): vscode.SourceControlResourceState {
+        return { resourceUri: vscode.Uri.file(path.join(repo, relativePath)) };
+    }
+
+    function captureErrorMessage(): () => string {
+        let message = "";
+        vscode.window.showErrorMessage = async (value: string) => {
+            message = value;
+            return undefined;
         };
+        return () => message;
+    }
+
+    function captureInformationMessage(): () => string {
+        let message = "";
+        vscode.window.showInformationMessage = async (value: string) => {
+            message = value;
+            return undefined;
+        };
+        return () => message;
+    }
+
+    function answerCommitMessage(message: string | undefined): void {
+        vscode.window.showInputBox = async () => message;
+    }
+
+    function commitAll(): void {
+        git(repo, ["add", "-A"]);
+        git(repo, ["commit", "-qm", "baseline"]);
+    }
+
+    /** Subject lines of every commit, newest first. */
+    function subjects(): string[] {
+        return git(repo, ["log", "--pretty=%s"])
+            .split("\n")
+            .filter(line => line.length > 0);
+    }
+
+    function stagedPaths(): string[] {
+        return git(repo, ["diff", "--cached", "--name-only"])
+            .split("\n")
+            .filter(line => line.length > 0);
     }
 
     test("should show error when no files are selected", async () => {
-        let errorMessage = "";
-        vscode.window.showErrorMessage = async (message: string) => {
-            errorMessage = message;
-            return undefined;
-        };
+        const errorMessage = captureErrorMessage();
 
         await quickCommit();
 
-        assert.strictEqual(errorMessage, "No files selected for Quick Commit.");
+        assert.strictEqual(errorMessage(), "No files selected for Quick Commit.");
     });
 
-    test("should commit multiple files with correct git commands", async () => {
-        const gitRoot = path.normalize("/projects/repo1");
-        let gitCommands: string[] = [];
+    test("should commit multiple files", async () => {
+        write(repo, "file1.ts", "const a = 1;\n");
+        write(repo, "file2.ts", "const b = 1;\n");
+        commitAll();
 
-        mockExecImpl = (cmd: string, options: any, callback: any) => {
-            gitCommands.push(cmd);
-            if (cmd.includes("rev-parse --show-toplevel")) {
-                callback(null, { stdout: gitRoot, stderr: "" });
-            } else if (cmd.includes("status --porcelain")) {
-                callback(null, { stdout: " M file1.ts\n M file2.ts\n", stderr: "" });
-            } else {
-                callback(null, { stdout: "", stderr: "" });
-            }
-        };
+        write(repo, "file1.ts", "const a = 2;\n");
+        write(repo, "file2.ts", "const b = 2;\n");
 
-        vscode.window.showInputBox = async () => "Test commit";
-        vscode.window.showInformationMessage = async () => undefined;
+        answerCommitMessage("Test commit");
+        captureInformationMessage();
 
-        const file1 = createMockResourceState(path.join(gitRoot, "file1.ts"));
-        const file2 = createMockResourceState(path.join(gitRoot, "file2.ts"));
+        await quickCommit(resource("file1.ts"), resource("file2.ts"));
 
-        await quickCommit(file1, file2);
-
-        // Should call: git rev-parse (x2), git status, git add, git commit
-        assert.ok(gitCommands.some(cmd => cmd.includes("git add")), "Should stage files");
-        assert.ok(gitCommands.some(cmd => cmd.includes("git commit")), "Should commit files");
-        const commitCmd = gitCommands.find(cmd => cmd.includes("git commit"));
-        assert.ok(commitCmd?.includes("file1.ts") && commitCmd?.includes("file2.ts"), "Should commit both files");
+        assert.deepStrictEqual(subjects(), ["Test commit", "baseline"]);
+        assert.strictEqual(git(repo, ["status", "--porcelain"]), "", "Working tree should be clean");
     });
 
-    test("should preserve already staged files", async () => {
-        const gitRoot = path.normalize("/projects/repo1");
-        let gitCommands: string[] = [];
+    test("should commit an untracked file", async () => {
+        write(repo, "seed.ts", "const seed = 1;\n");
+        commitAll();
 
-        mockExecImpl = (cmd: string, options: any, callback: any) => {
-            gitCommands.push(cmd);
-            if (cmd.includes("rev-parse --show-toplevel")) {
-                callback(null, { stdout: gitRoot, stderr: "" });
-            } else if (cmd.includes("status --porcelain")) {
-                // already-staged.ts is staged (M in first column), new-file.ts is unstaged
-                callback(null, { stdout: "M  already-staged.ts\n M new-file.ts\n", stderr: "" });
-            } else {
-                callback(null, { stdout: "", stderr: "" });
-            }
-        };
+        write(repo, "brand-new.ts", "const isNew = true;\n");
 
-        vscode.window.showInputBox = async () => "Commit new file";
-        vscode.window.showInformationMessage = async () => undefined;
+        answerCommitMessage("Add new file");
+        captureInformationMessage();
 
-        const newFile = createMockResourceState(path.join(gitRoot, "new-file.ts"));
-        await quickCommit(newFile);
+        await quickCommit(resource("brand-new.ts"));
 
-        const addCommands = gitCommands.filter(cmd => cmd.includes("git add"));
-        // Should only add new-file.ts since already-staged.ts stays in staging area
-        // Note: git commit -- <files> does NOT unstage other files, so no need to re-add
-        assert.strictEqual(addCommands.length, 1, "Should call git add once for the new file");
-        assert.ok(addCommands[0].includes("new-file.ts"), "Should stage the selected file");
-
-        const commitCommand = gitCommands.find(cmd => cmd.includes("git commit"));
-        assert.ok(commitCommand?.includes("new-file.ts"), "Should commit only the selected file");
+        assert.deepStrictEqual(git(repo, ["show", "--pretty=", "--name-only", "HEAD"]).trim(), "brand-new.ts");
     });
 
-    test("should handle commit errors", async () => {
-        const gitRoot = path.normalize("/projects/repo1");
-        let errorMessage = "";
+    test("should leave unrelated staged files in the index", async () => {
+        write(repo, "already-staged.ts", "const staged = 1;\n");
+        write(repo, "selected.ts", "const selected = 1;\n");
+        commitAll();
 
-        mockExecImpl = (cmd: string, options: any, callback: any) => {
-            if (cmd.includes("rev-parse --show-toplevel")) {
-                callback(null, { stdout: gitRoot, stderr: "" });
-            } else if (cmd.includes("status --porcelain")) {
-                callback(null, { stdout: " M file.ts\n", stderr: "" });
-            } else if (cmd.includes("git commit")) {
-                callback(new Error("nothing to commit"), { stdout: "", stderr: "nothing to commit" });
-            } else {
-                callback(null, { stdout: "", stderr: "" });
-            }
-        };
+        write(repo, "already-staged.ts", "const staged = 2;\n");
+        git(repo, ["add", "already-staged.ts"]);
+        write(repo, "selected.ts", "const selected = 2;\n");
 
-        vscode.window.showInputBox = async () => "Test";
-        vscode.window.showErrorMessage = async (msg: string) => {
-            errorMessage = msg;
-            return undefined;
-        };
+        answerCommitMessage("Commit only the selection");
+        captureInformationMessage();
 
-        const file = createMockResourceState(path.join(gitRoot, "file.ts"));
-        await quickCommit(file);
+        await quickCommit(resource("selected.ts"));
 
-        assert.ok(errorMessage.includes("Quick Commit failed"), "Should show error");
-        assert.ok(errorMessage.includes("nothing to commit"), "Should include git error message");
+        assert.deepStrictEqual(
+            git(repo, ["show", "--pretty=", "--name-only", "HEAD"]).trim(),
+            "selected.ts",
+            "Only the selected file should be committed"
+        );
+        assert.deepStrictEqual(stagedPaths(), ["already-staged.ts"], "The other file should stay staged");
+    });
+
+    test("should show error when the commit fails", async () => {
+        write(repo, "seed.ts", "const seed = 1;\n");
+        commitAll();
+
+        answerCommitMessage("Commit a file that is not there");
+        const errorMessage = captureErrorMessage();
+
+        await quickCommit(resource("missing.ts"));
+
+        assert.ok(errorMessage().startsWith("Quick Commit failed:"), `Unexpected message: ${errorMessage()}`);
+        assert.ok(errorMessage().includes("missing.ts"), "Should include the git error message");
+        assert.deepStrictEqual(subjects(), ["baseline"], "Nothing should be committed");
     });
 
     test("should not commit when user cancels", async () => {
-        const gitRoot = path.normalize("/projects/repo1");
-        let commitCalled = false;
+        write(repo, "file.ts", "const a = 1;\n");
+        commitAll();
 
-        mockExecImpl = (cmd: string, options: any, callback: any) => {
-            if (cmd.includes("git commit")) {
-                commitCalled = true;
-            }
-            if (cmd.includes("rev-parse --show-toplevel")) {
-                callback(null, { stdout: gitRoot, stderr: "" });
-            } else {
-                callback(null, { stdout: "", stderr: "" });
-            }
-        };
+        write(repo, "file.ts", "const a = 2;\n");
 
-        vscode.window.showInputBox = async () => undefined; // User cancels
+        answerCommitMessage(undefined); // User cancels
 
-        const file = createMockResourceState(path.join(gitRoot, "file.ts"));
-        await quickCommit(file);
+        await quickCommit(resource("file.ts"));
 
-        assert.strictEqual(commitCalled, false, "Should not commit when user cancels");
+        assert.deepStrictEqual(subjects(), ["baseline"], "Nothing should be committed");
     });
 
     test("should show success message with correct file count", async () => {
-        const gitRoot = path.normalize("/projects/repo1");
-        let infoMessage = "";
+        write(repo, "f1.ts", "const a = 1;\n");
+        write(repo, "f2.ts", "const b = 1;\n");
+        write(repo, "f3.ts", "const c = 1;\n");
 
-        mockExecImpl = (cmd: string, options: any, callback: any) => {
-            if (cmd.includes("rev-parse --show-toplevel")) {
-                callback(null, { stdout: gitRoot, stderr: "" });
-            } else if (cmd.includes("status --porcelain")) {
-                callback(null, { stdout: " M f1.ts\n M f2.ts\n M f3.ts\n", stderr: "" });
-            } else {
-                callback(null, { stdout: "", stderr: "" });
-            }
-        };
+        answerCommitMessage("Multi file commit");
+        const infoMessage = captureInformationMessage();
 
-        vscode.window.showInputBox = async () => "Multi file commit";
-        vscode.window.showInformationMessage = async (msg: string) => {
-            infoMessage = msg;
-            return undefined;
-        };
+        await quickCommit(resource("f1.ts"), resource("f2.ts"), resource("f3.ts"));
 
-        const f1 = createMockResourceState(path.join(gitRoot, "f1.ts"));
-        const f2 = createMockResourceState(path.join(gitRoot, "f2.ts"));
-        const f3 = createMockResourceState(path.join(gitRoot, "f3.ts"));
-
-        await quickCommit(f1, f2, f3);
-
-        assert.ok(infoMessage.includes("3 files"), "Should show correct file count");
-        assert.ok(infoMessage.includes("Successfully committed"), "Should show success message");
+        assert.strictEqual(infoMessage(), "Quick Commit: Successfully committed 3 files.");
     });
 
-    test("should properly escape commit messages with spaces", async () => {
-        const gitRoot = path.normalize("/projects/repo1");
-        let commitCommand = "";
+    test("should pass commit messages and paths through verbatim", async () => {
+        // Spaces and shell metacharacters used to be escaped by hand into a shell command line.
+        const message = 'fix: handle "quoted" & $spaced input';
+        write(repo, "a file with spaces.ts", "const a = 1;\n");
 
-        mockExecImpl = (cmd: string, options: any, callback: any) => {
-            if (cmd.includes("rev-parse --show-toplevel")) {
-                callback(null, { stdout: gitRoot, stderr: "" });
-            } else if (cmd.includes("status --porcelain")) {
-                callback(null, { stdout: " M file.ts\n", stderr: "" });
-            } else if (cmd.includes("git commit")) {
-                commitCommand = cmd;
-                callback(null, { stdout: "", stderr: "" });
-            } else {
-                callback(null, { stdout: "", stderr: "" });
+        answerCommitMessage(message);
+        captureInformationMessage();
+
+        await quickCommit(resource("a file with spaces.ts"));
+
+        assert.deepStrictEqual(subjects(), [message]);
+        assert.strictEqual(git(repo, ["show", "--pretty=", "--name-only", "HEAD"]).trim(), "a file with spaces.ts");
+    });
+
+    test("should show error when files come from different repositories", async () => {
+        const otherRepo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "vscode-quick-commit-other-")));
+        git(otherRepo, ["init", "-q", "."]);
+        fs.writeFileSync(path.join(otherRepo, "outside.ts"), "const outside = 1;\n");
+
+        write(repo, "inside.ts", "const inside = 1;\n");
+
+        answerCommitMessage("Should never run");
+        const errorMessage = captureErrorMessage();
+
+        try {
+            await quickCommit(resource("inside.ts"), {
+                resourceUri: vscode.Uri.file(path.join(otherRepo, "outside.ts")),
+            } as vscode.SourceControlResourceState);
+
+            assert.strictEqual(errorMessage(), "Selected files must be from the same repository.");
+            assert.strictEqual(git(repo, ["status", "--porcelain"]).includes("?? inside.ts"), true, "Nothing staged");
+        } finally {
+            try {
+                fs.rmSync(otherRepo, { recursive: true, force: true });
+            } catch {
+                // See teardown.
             }
-        };
-
-        vscode.window.showInputBox = async () => "update list of files to hide";
-        vscode.window.showInformationMessage = async () => undefined;
-
-        const file = createMockResourceState(path.join(gitRoot, "file.ts"));
-        await quickCommit(file);
-
-        // Verify the commit message is wrapped in quotes as a single argument
-        assert.ok(commitCommand.includes('"update list of files to hide"'),
-            "Commit message with spaces should be wrapped in quotes");
-
-        // Verify it doesn't split the message into multiple arguments
-        assert.ok(!commitCommand.match(/git.*-m\s+"update"\s+"list"/),
-            "Commit message should not be split into multiple arguments");
+        }
     });
 });
-
-

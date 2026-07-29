@@ -68,9 +68,11 @@ This feature allows you to quickly hide or show files in the Explorer based on y
 
 ## Git
 
-| Option       | Available in                | Description                                                                                                  |
-| ------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Quick Commit | Source Control context menu | Right-click on one or multiple files in the Source Control panel to stage and commit them with a single action. |
+| Option            | Available in                             | Description                                                                                                     |
+| ----------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Quick Commit      | Source Control context menu              | Right-click on one or multiple files in the Source Control panel to stage and commit them with a single action.   |
+| Auto Stage        | Source Control panel / Command palette   | Stages every changed file that qualifies as not worth reviewing. Currently that means whitespace-only changes.    |
+| Stage Active File | `Ctrl+Alt+S` in a diff / Command palette | Stages the file you are currently looking at, without leaving the diff editor.                                    |
 
 ### Quick Commit
 
@@ -81,6 +83,28 @@ This feature allows you to quickly stage and commit selected files from the Sour
 3. Select "Quick Commit..." from the context menu
 4. Enter your commit message in the input box
 5. The selected files will be staged and committed
+
+### Auto Stage
+
+Stages the changes that are not worth reading, so that what is left in the Changes group is only what you actually need to review.
+
+1. Open the Source Control panel (Ctrl+Shift+G)
+2. Click the sparkle icon on the "Changes" group header, or right-click the group and select "Auto Stage"
+
+A file qualifies when its unstaged changes disappear once whitespace is ignored - re-indentation, added or removed spaces, added or removed blank lines. Files with any real content change are left alone, as are binary files, mode-only changes, and added, deleted or untracked files.
+
+The classification is deliberately a separate step from the staging, so further rules can be added over time without changing how the command behaves.
+
+### Stage Active File
+
+Staging one file at a time from the Source Control panel means moving the mouse back and forth between the diff and the list. This command stages whatever file is in front of you instead:
+
+1. Open a changed file as a diff
+2. Press `Ctrl+Alt+S` (`Cmd+Alt+S` on macOS)
+
+It works from either side of the diff, from a diff tab that does not have focus in its content, and on the file the caret sits in inside a multi-diff editor. Outside a diff editor the shortcut is inactive, but the command is still available in the palette for the file in the active editor.
+
+**Note:** when reviewing changes in the multi-diff editor ("Open All Changes"), VS Code's built-in Git extension already puts a `+` button in each file's header toolbar that does the same thing with one click.
 
 ### Update Props Destructuring
 

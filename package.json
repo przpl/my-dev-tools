@@ -129,6 +129,15 @@
                 "title": "Quick Commit..."
             },
             {
+                "command": "myDevTools.autoStage",
+                "title": "Auto Stage",
+                "icon": "$(sparkle)"
+            },
+            {
+                "command": "myDevTools.stageActiveFile",
+                "title": "Stage Active File"
+            },
+            {
                 "command": "myDevTools.showExplorerFiles",
                 "title": "Show Hidden Files in Explorer",
                 "icon": "$(eye)"
@@ -200,6 +209,18 @@
                     "group": "1_modification"
                 }
             ],
+            "scm/resourceGroup/context": [
+                {
+                    "command": "myDevTools.autoStage",
+                    "when": "scmProvider == git && scmResourceGroup == workingTree",
+                    "group": "inline@3"
+                },
+                {
+                    "command": "myDevTools.autoStage",
+                    "when": "scmProvider == git && scmResourceGroup == workingTree",
+                    "group": "1_modification"
+                }
+            ],
             "commandPalette": [
                 {
                     "command": "myDevTools.quickCommit",
@@ -266,6 +287,14 @@
                         "group": "rename"
                     }
                 ]
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "myDevTools.stageActiveFile",
+                "key": "ctrl+alt+s",
+                "mac": "cmd+alt+s",
+                "when": "isInDiffEditor"
             }
         ]
     },
