@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { findAutoStageableFiles, findWhitespaceOnlyChanges } from "../../../features/git/autoStage";
+import { findAutoStageableFiles, findFormattingOnlyChanges, findWhitespaceOnlyChanges } from "../../../features/git/autoStage";
 
 function git(cwd: string, args: string[]): void {
     cp.execFileSync("git", args, { cwd, stdio: "pipe" });
@@ -124,12 +124,155 @@ suite("AutoStage Tests", () => {
 
     test("collects the files every classification rule accepts", async () => {
         write(repo, "whitespace.ts", "const a = 1;\n");
+        write(repo, "wrapped.ts", "const c = veryLongFunctionName(firstArgument, secondArgument);\n");
         write(repo, "content.ts", "const b = 1;\n");
         commitAll();
 
         write(repo, "whitespace.ts", "const a = 1;   \n");
+        write(repo, "wrapped.ts", "const c = veryLongFunctionName(\n    firstArgument,\n    secondArgument,\n);\n");
         write(repo, "content.ts", "const b = 42;\n");
 
-        assert.deepStrictEqual(await findAutoStageableFiles(repo), ["whitespace.ts"]);
+        assert.deepStrictEqual(await findAutoStageableFiles(repo), ["whitespace.ts", "wrapped.ts"]);
+    });
+
+    suite("re-wrapped lines", () => {
+        const SINGLE_LINE_JSX =
+            "export function Page() {\n    return <PayloadLivePreview refresh={router.refresh} serverURL={getClientSideURL()} />;\n}\n";
+        const WRAPPED_JSX =
+            "export function Page() {\n" +
+            "    return (\n" +
+            "        <PayloadLivePreview\n" +
+            "            refresh={router.refresh}\n" +
+            "            serverURL={getClientSideURL()}\n" +
+            "        />\n" +
+            "    );\n" +
+            "}\n";
+
+        test("git's whitespace-insensitive diff cannot see through a re-wrap", async () => {
+            write(repo, "page.tsx", SINGLE_LINE_JSX);
+            commitAll();
+
+            write(repo, "page.tsx", WRAPPED_JSX);
+
+            // This is the bug the token comparison exists to cover.
+            assert.deepStrictEqual(await findWhitespaceOnlyChanges(repo), []);
+        });
+
+        test("detects a re-wrap that only adds the parentheses a formatter needs", async () => {
+            write(repo, "page.tsx", SINGLE_LINE_JSX);
+            commitAll();
+
+            write(repo, "page.tsx", WRAPPED_JSX);
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), ["page.tsx"]);
+        });
+
+        test("ignores a re-wrap that also changes the code", async () => {
+            write(repo, "page.tsx", SINGLE_LINE_JSX);
+            commitAll();
+
+            write(repo, "page.tsx", WRAPPED_JSX.replace("refresh={router.refresh}", "refresh={() => {\n router.refresh();\n }}"));
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), []);
+        });
+
+        test("detects joining several lines back into one", async () => {
+            write(repo, "join.ts", "const value = compute(\n    first,\n    second,\n);\n");
+            commitAll();
+
+            write(repo, "join.ts", "const value = compute(first, second);\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), ["join.ts"]);
+        });
+
+        test("detects the trailing comma a formatter adds when it wraps an object literal", async () => {
+            write(repo, "options.ts", "const options = { retries: 3, timeout: 1000 };\n");
+            commitAll();
+
+            write(repo, "options.ts", "const options = {\n    retries: 3,\n    timeout: 1000,\n};\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), ["options.ts"]);
+        });
+
+        test("ignores an added array elision", async () => {
+            write(repo, "sparse.ts", "const items = [first, second];\n");
+            commitAll();
+
+            write(repo, "sparse.ts", "const items = [\n    first,\n    second,\n    ,\n];\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), []);
+        });
+
+        test("ignores a comma that becomes a sequence expression", async () => {
+            write(repo, "sequence.ts", "handler(first, second);\n");
+            commitAll();
+
+            write(repo, "sequence.ts", "handler(first), second;\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), []);
+        });
+
+        test("detects re-indented JSX children", async () => {
+            write(repo, "children.tsx", "const a = (\n    <div>\n        Hello world\n    </div>\n);\n");
+            commitAll();
+
+            write(repo, "children.tsx", "const a = <div>Hello world</div>;\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), ["children.tsx"]);
+        });
+
+        test("ignores parentheses that change how an expression associates", async () => {
+            write(repo, "math.ts", "const total = (a + b) * c;\n");
+            commitAll();
+
+            write(repo, "math.ts", "const total = a + b * c;\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), []);
+        });
+
+        test("ignores a deleted comment", async () => {
+            write(repo, "commented.ts", "// explains the constant\nconst a = 1;\n");
+            commitAll();
+
+            write(repo, "commented.ts", "const a = 1;\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), []);
+        });
+
+        test("ignores a changed declaration keyword", async () => {
+            write(repo, "keyword.ts", "let a = 1;\n");
+            commitAll();
+
+            write(repo, "keyword.ts", "const a = 1;\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), []);
+        });
+
+        test("ignores re-indentation inside a template literal", async () => {
+            write(repo, "template.ts", "const query = `\n    SELECT 1\n`;\n");
+            commitAll();
+
+            write(repo, "template.ts", "const query = `\n        SELECT 1\n`;\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), []);
+        });
+
+        test("ignores a file that no longer parses", async () => {
+            write(repo, "broken.ts", "const a = 1;\n");
+            commitAll();
+
+            write(repo, "broken.ts", "const a = (;\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), []);
+        });
+
+        test("ignores re-wrapped files it cannot parse", async () => {
+            write(repo, "notes.md", "one two three\n");
+            commitAll();
+
+            write(repo, "notes.md", "one\ntwo\nthree\n");
+
+            assert.deepStrictEqual(await findFormattingOnlyChanges(repo), []);
+        });
     });
 });
