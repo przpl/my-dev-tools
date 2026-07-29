@@ -1,13 +1,15 @@
 {
     "compilerOptions": {
         "module": "commonjs",
+        "moduleResolution": "bundler",
+        "customConditions": ["node"],
+        "types": ["node", "mocha", "vscode"],
         "target": "ES2020",
         "outDir": "../../out/test",
         "lib": ["ES2020"],
         "sourceMap": true,
         "rootDir": "..",
         "strict": true,
-        "esModuleInterop": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
         "resolveJsonModule": true
