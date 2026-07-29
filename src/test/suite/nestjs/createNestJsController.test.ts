@@ -17,9 +17,15 @@ suite("CreateNestJsController Tests", () => {
         // Close all editors
         await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
-        // Clean up temporary files
+        // Clean up temporary files. VS Code disposes documents asynchronously after
+        // the tab closes, so on Windows the directory can still be locked here.
+        // Retry, then give up quietly - a leaked temp dir must not fail the test.
         if (tempDir && fs.existsSync(tempDir)) {
-            fs.rmSync(tempDir, { recursive: true, force: true });
+            try {
+                fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+            } catch {
+                // ignore
+            }
         }
     });
 

@@ -31,10 +31,8 @@ function extractRenameTargetFilename(edit: vscode.WorkspaceEdit): string | undef
 }
 
 suite("RenameFile Tests", () => {
-    let testEditor: vscode.TextEditor;
     let originalActiveTextEditor: vscode.TextEditor | undefined;
     let tempDir: string;
-    let testFilePath: string | undefined;
 
     setup(async () => {
         // Store original methods
@@ -61,16 +59,19 @@ suite("RenameFile Tests", () => {
     });
 
     teardown(async () => {
-        if (testEditor) {
-            await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
-        }
+        // Close all editors so Windows releases its handles on the temp files
+        await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
         // Clean up temporary files
-        if (testFilePath && fs.existsSync(testFilePath)) {
-            fs.unlinkSync(testFilePath);
-        }
         if (tempDir && fs.existsSync(tempDir)) {
-            fs.rmSync(tempDir, { recursive: true, force: true });
+            // VS Code disposes documents asynchronously after the tab closes, so on
+            // Windows the directory can still be locked here. Retry, then give up
+            // quietly - a leaked temp dir must not fail the test.
+            try {
+                fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+            } catch {
+                // ignore
+            }
         }
 
         // Restore original activeTextEditor property
@@ -84,13 +85,13 @@ suite("RenameFile Tests", () => {
 
     async function createTestFile(content: string, fileName: string = "test-file.ts"): Promise<void> {
         // Create a temporary file on disk with the test content
-        testFilePath = path.join(tempDir, fileName);
+        const testFilePath = path.join(tempDir, fileName);
         fs.writeFileSync(testFilePath, content, "utf8");
 
         // Open the file in VS Code
         const uri = vscode.Uri.file(testFilePath);
         const testDocument = await vscode.workspace.openTextDocument(uri);
-        testEditor = await vscode.window.showTextDocument(testDocument);
+        await vscode.window.showTextDocument(testDocument);
     }
 
     test("should show error when no active editor", async () => {

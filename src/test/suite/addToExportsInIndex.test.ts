@@ -18,9 +18,15 @@ suite("AddToExportsInIndex Tests", () => {
         // Close all editors
         await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
-        // Clean up temporary files
+        // Clean up temporary files. VS Code disposes documents asynchronously after
+        // the tab closes, so on Windows the directory can still be locked here.
+        // Retry, then give up quietly - a leaked temp dir must not fail the test.
         if (tempDir && fs.existsSync(tempDir)) {
-            fs.rmSync(tempDir, { recursive: true, force: true });
+            try {
+                fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+            } catch {
+                // ignore
+            }
         }
     });
 
@@ -46,8 +52,13 @@ suite("AddToExportsInIndex Tests", () => {
         // Restore original method
         vscode.window.showInformationMessage = originalShowInformationMessage;
 
-        // Clean up isolated directory
-        fs.rmSync(isolatedDir, { recursive: true, force: true });
+        // Clean up isolated directory. The editor still holds the file open here, so
+        // this is best-effort - it must not mask the assertion below.
+        try {
+            fs.rmSync(isolatedDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+        } catch {
+            // ignore
+        }
 
         assert.strictEqual(infoMessage, "No nearest index.ts file found.", "Should show message when no index.ts found");
     });

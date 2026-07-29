@@ -69,8 +69,15 @@ suite("DeleteEmptyDirectories Tests", () => {
         vscode.window.showErrorMessage = originalShowErrorMessage;
         vscode.window.withProgress = originalWithProgress;
 
+        // VS Code disposes documents asynchronously after the tab closes, so on
+        // Windows the directory can still be locked here. Retry, then give up
+        // quietly - a leaked temp dir must not fail the test.
         if (tempDir && fs.existsSync(tempDir)) {
-            fs.rmSync(tempDir, { recursive: true, force: true });
+            try {
+                fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+            } catch {
+                // ignore
+            }
         }
     });
 
