@@ -71,7 +71,7 @@ This feature allows you to quickly hide or show files in the Explorer based on y
 | Option            | Available in                             | Description                                                                                                     |
 | ----------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | Quick Commit      | Source Control context menu              | Right-click on one or multiple files in the Source Control panel to stage and commit them with a single action.   |
-| Auto Stage        | Source Control panel / Command palette   | Stages every changed file that qualifies as not worth reviewing. Currently that means whitespace-only changes.    |
+| Auto Stage        | Source Control panel / Command palette   | Stages every changed file that is the same code as the version already staged, only reformatted.                  |
 | Stage Active File | `Ctrl+Alt+S` in a diff / Command palette | Stages the file you are currently looking at, without leaving the diff editor.                                    |
 
 ### Quick Commit
@@ -91,7 +91,11 @@ Stages the changes that are not worth reading, so that what is left in the Chang
 1. Open the Source Control panel (Ctrl+Shift+G)
 2. Click the sparkle icon on the "Changes" group header, or right-click the group and select "Auto Stage"
 
-A file qualifies when its unstaged changes disappear once whitespace is ignored - re-indentation, added or removed spaces, added or removed blank lines. Files with any real content change are left alone, as are binary files, mode-only changes, and added, deleted or untracked files.
+A file qualifies when its working-tree version is the same code as the version already in the index, only laid out differently. Both versions are parsed and compared, so the verdict never depends on how the diff happens to be laid out.
+
+Covered formats: `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs`, `.json` `.jsonc` (including files that carry comments, such as `tsconfig.json`), and `.css` `.scss` `.less`.
+
+Everything else is left for you to read: any real content change, added, deleted, untracked and conflicted files, mode-only changes, lock files, and every format where whitespace is content - Markdown, YAML, Python, plain text - where an "invisible" change can quietly be a different document.
 
 The classification is deliberately a separate step from the staging, so further rules can be added over time without changing how the command behaves.
 

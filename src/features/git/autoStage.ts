@@ -2,68 +2,53 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 
-import { isFormattingOnlyChange, isParseable } from "./formattingOnly";
+import { isFormattingOnlyChange, isSupportedFile } from "./formattingOnly";
 import { execGit, execGitWithStdin, findGitRoot } from "./gitCli";
 
 const MAX_FILES_IN_MESSAGE = 5;
+
+/** Reading every candidate costs a `git show` process, so a wide sweep is kept to a few at a time. */
+const MAX_CONCURRENT_READS = 16;
+
+/**
+ * Lock files are machine-generated dependency records. A reformat of one is still a supply-chain
+ * change in the making, and they are the one JSON file nobody wants staged without a look.
+ */
+const NEVER_AUTO_STAGED = /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|[^/]+\.lock)$/i;
 
 /** Drops the trailing empty entry that follows git's final NUL. */
 function splitNulTerminated(output: string): string[] {
     return output.split("\0").filter(entry => entry.length > 0);
 }
 
-/** `--numstat -z` emits one `added\tdeleted\tpath` record per file. */
-function parseNumstatPaths(output: string): string[] {
-    const paths: string[] = [];
-
-    for (const record of splitNulTerminated(output)) {
-        const separator = record.lastIndexOf("\t");
-        if (separator !== -1) {
-            paths.push(record.substring(separator + 1));
-        }
-    }
-
-    return paths;
-}
-
-/** `--name-status -z` alternates status and path entries; `--no-renames` keeps every record two entries wide. */
-function parseModifiedPaths(output: string): Set<string> {
+/**
+ * `--name-status -z` alternates status and path entries; `--no-renames` keeps every record two
+ * entries wide. Only `M` is taken, which leaves out additions, deletions and type changes.
+ *
+ * A path with an unresolved merge conflict is reported twice, as `U` and again as `M`, so the `U`
+ * records have to be subtracted rather than merely skipped: staging one would mark it resolved.
+ */
+function parseModifiedPaths(output: string): string[] {
     const entries = splitNulTerminated(output);
-    const modified = new Set<string>();
+    const modified: string[] = [];
+    const unmerged = new Set<string>();
 
     for (let i = 0; i + 1 < entries.length; i += 2) {
-        if (entries[i].startsWith("M")) {
-            modified.add(entries[i + 1]);
+        const [status, file] = [entries[i], entries[i + 1]];
+
+        if (status.startsWith("U")) {
+            unmerged.add(file);
+        } else if (status.startsWith("M")) {
+            modified.push(file);
         }
     }
 
-    return modified;
+    return modified.filter(file => !unmerged.has(file));
 }
 
-interface UnstagedDiff {
-    /** Files reported as modified, relative to the repository root, with forward slashes. */
-    modified: string[];
-    /** The subset that still differs once whitespace inside lines is ignored. */
-    meaningful: Set<string>;
-}
-
-/**
- * Binary files, mode-only changes and pure additions or deletions survive both passes (or are not
- * reported as modifications), so they never reach a classification rule.
- */
-async function readUnstagedDiff(gitRoot: string): Promise<UnstagedDiff> {
-    const [allChanges, meaningfulChanges, nameStatus] = await Promise.all([
-        execGit(gitRoot, ["diff", "--numstat", "--no-renames", "-z"]),
-        execGit(gitRoot, ["diff", "--numstat", "--no-renames", "-z", "--ignore-all-space", "--ignore-blank-lines"]),
-        execGit(gitRoot, ["diff", "--name-status", "--no-renames", "-z"]),
-    ]);
-
-    const modified = parseModifiedPaths(nameStatus);
-
-    return {
-        modified: parseNumstatPaths(allChanges).filter(file => modified.has(file)),
-        meaningful: new Set(parseNumstatPaths(meaningfulChanges)),
-    };
+/** Files with unstaged modifications, relative to the repository root, with forward slashes. */
+async function readModifiedFiles(gitRoot: string): Promise<string[]> {
+    return parseModifiedPaths(await execGit(gitRoot, ["diff", "--name-status", "--no-renames", "-z"]));
 }
 
 /** Reads the version of `file` the unstaged diff is taken against, which is the index, not HEAD. */
@@ -83,55 +68,42 @@ async function readWorkingTreeContent(gitRoot: string, file: string): Promise<st
     }
 }
 
-/**
- * Rule: unstaged files whose changes vanish once whitespace is ignored - added or removed spaces
- * and blank lines only. Paths are relative to `gitRoot` and use forward slashes.
- *
- * Detection is a set difference between the normal diff and a whitespace-insensitive one.
- */
-export async function findWhitespaceOnlyChanges(gitRoot: string): Promise<string[]> {
-    const diff = await readUnstagedDiff(gitRoot);
-    return selectWhitespaceOnly(diff);
+async function mapWithLimit<T, R>(items: T[], limit: number, map: (item: T) => Promise<R>): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let next = 0;
+
+    const worker = async (): Promise<void> => {
+        while (next < items.length) {
+            const index = next++;
+            results[index] = await map(items[index]);
+        }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
 }
 
-function selectWhitespaceOnly(diff: UnstagedDiff): string[] {
-    return diff.modified.filter(file => !diff.meaningful.has(file));
-}
+async function isCosmeticChange(gitRoot: string, file: string): Promise<boolean> {
+    const [before, after] = await Promise.all([readIndexContent(gitRoot, file), readWorkingTreeContent(gitRoot, file)]);
+    if (before === undefined || after === undefined) {
+        return false;
+    }
 
-/**
- * Rule: unstaged files a formatter only re-laid out. Git's whitespace-insensitive diff compares whole
- * lines, so re-wrapping one line into several always looks like a real change to it; those files are
- * re-checked here by comparing the parsed token streams instead.
- */
-export async function findFormattingOnlyChanges(gitRoot: string): Promise<string[]> {
-    const diff = await readUnstagedDiff(gitRoot);
-    return selectFormattingOnly(gitRoot, diff);
-}
-
-async function selectFormattingOnly(gitRoot: string, diff: UnstagedDiff): Promise<string[]> {
-    const candidates = diff.modified.filter(file => diff.meaningful.has(file) && isParseable(file));
-
-    const verdicts = await Promise.all(
-        candidates.map(async file => {
-            const [before, after] = await Promise.all([readIndexContent(gitRoot, file), readWorkingTreeContent(gitRoot, file)]);
-            return before !== undefined && after !== undefined && isFormattingOnlyChange(file, before, after);
-        }),
-    );
-
-    return candidates.filter((_, i) => verdicts[i]);
+    // Identical content means the diff is a file mode change, which is an intentional edit, not a reformat.
+    return before !== after && isFormattingOnlyChange(file, before, after);
 }
 
 /**
- * Returns the unstaged files that are safe to stage without review: the union of every classification
- * rule. Further rules are meant to be unioned in here.
+ * Returns the unstaged files that are safe to stage without review: those whose working-tree version
+ * is provably the same program, stylesheet or document as the version already in the index.
  */
 export async function findAutoStageableFiles(gitRoot: string): Promise<string[]> {
-    const diff = await readUnstagedDiff(gitRoot);
-    const [whitespaceOnly, formattingOnly] = [selectWhitespaceOnly(diff), await selectFormattingOnly(gitRoot, diff)];
+    const modified = await readModifiedFiles(gitRoot);
+    const candidates = modified.filter(file => isSupportedFile(file) && !NEVER_AUTO_STAGED.test(file));
 
-    const selected = new Set([...whitespaceOnly, ...formattingOnly]);
+    const verdicts = await mapWithLimit(candidates, MAX_CONCURRENT_READS, file => isCosmeticChange(gitRoot, file));
 
-    return diff.modified.filter(file => selected.has(file));
+    return candidates.filter((_, i) => verdicts[i]);
 }
 
 /** VS Code passes the clicked resource group, or the individual resource states, as separate arguments. */
