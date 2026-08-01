@@ -92,6 +92,9 @@ Whatever you have already typed into the message box is sent along as a hint abo
 | `myDevTools.commitMessage.maxDiffCharacters`     | `80000`                      | Character budget for the diff.                                                        |
 | `myDevTools.commitMessage.stripImportsAboveLines` | `200`                        | Line count past which import churn is dropped.                                        |
 | `myDevTools.commitMessage.excludeGlobs`          | lock files, bundles, `dist/`  | Paths listed by name but never diffed.                                                |
+| `myDevTools.commitMessage.maxDiffLineLength`     | `160`                        | Each diff line is truncated to this length. `0` sends every line in full.              |
+| `myDevTools.commitMessage.summarizeAddedScriptsAboveLines` | `60`               | A new `.ts`/`.js` file longer than this is sent as declarations only. `0` disables it. |
+| `myDevTools.commitMessage.outlineAddedMarkdownAboveLines` | `150`                | A new Markdown file longer than this is sent as headings only. `0` disables it.        |
 | `myDevTools.commitMessage.additionalInstructions` | empty                        | Appended to the prompt, for project-specific conventions.                             |
 
 #### Not working yet: the button inside the message box

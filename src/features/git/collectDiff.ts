@@ -12,7 +12,15 @@ import { execGit, execGitRaw } from "./gitCli";
  * while still being *named* so a dependency bump is still recognisable as one.
  */
 
-const DIFF_FLAGS = ["--no-color", "--no-ext-diff", "--diff-algorithm=minimal", "-M", "-C", "-U2"];
+/**
+ * `-U0` drops context lines: git still names the enclosing declaration on the `@@` line, which is the
+ * only context a commit message reads. `-D` prints a deleted file's header without its body, which the
+ * file list already accounts for. `--ignore-blank-lines` drops hunks that only move blank lines around.
+ */
+const DIFF_FLAGS = ["--no-color", "--no-ext-diff", "--diff-algorithm=minimal", "-M", "-C", "-U0", "-D", "--ignore-blank-lines"];
+
+/** Dropped when the narrowed flags hide the whole change, which only blank-line edits can do. */
+const NARROWING_FLAGS = new Set(["--ignore-blank-lines"]);
 
 /** Reading both versions of a file costs a `git show`; a wide sweep is kept to a few at a time. */
 const MAX_CONCURRENT_READS = 16;
@@ -186,6 +194,28 @@ async function findFormattingOnlyPaths(gitRoot: string, scope: DiffScope, files:
     return new Set(candidates.filter((_, index) => verdicts[index]));
 }
 
+/**
+ * The diff of the tracked files. A commit that only adds or removes blank lines has a real change to
+ * describe but produces nothing under `--ignore-blank-lines`, so that flag is dropped and the diff
+ * re-read rather than leaving the model with a file list and no evidence.
+ */
+async function readTrackedDiff(
+    gitRoot: string,
+    revisions: string[],
+    paths: string[],
+    exclusions: string[],
+    expectChanges: boolean
+): Promise<string> {
+    const diff = await execGitRaw(gitRoot, ["diff", ...revisions, ...DIFF_FLAGS, "--", ...paths, ...exclusions]);
+
+    if (diff.trim().length > 0 || !expectChanges) {
+        return diff;
+    }
+
+    const widened = DIFF_FLAGS.filter(flag => !NARROWING_FLAGS.has(flag));
+    return execGitRaw(gitRoot, ["diff", ...revisions, ...widened, "--", ...paths, ...exclusions]);
+}
+
 export async function collectDiff(gitRoot: string, scope: DiffScope, excludeGlobs: readonly string[]): Promise<CollectedDiff> {
     const { revisions, paths } = scope;
     const exclusions = excludePathspecs(excludeGlobs);
@@ -204,7 +234,7 @@ export async function collectDiff(gitRoot: string, scope: DiffScope, excludeGlob
         ...untracked.map(file => ({ status: "?", path: file, excluded: !untrackedSet.has(file) })),
     ];
 
-    const trackedDiff = await execGitRaw(gitRoot, ["diff", ...revisions, ...DIFF_FLAGS, "--", ...paths, ...exclusions]);
+    const trackedDiff = await readTrackedDiff(gitRoot, revisions, paths, exclusions, included.size > 0);
     const untrackedDiff = [...untrackedSet].map(file => synthesizeUntrackedDiff(gitRoot, file));
 
     return {

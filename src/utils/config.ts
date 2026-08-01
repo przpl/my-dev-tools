@@ -59,6 +59,18 @@ class ConfigManager {
         return this.config.get<number>("commitMessage.stripImportsAboveLines", 200);
     }
 
+    get commitMessageSummarizeAddedScriptsAboveLines(): number {
+        return this.config.get<number>("commitMessage.summarizeAddedScriptsAboveLines", 60);
+    }
+
+    get commitMessageOutlineAddedMarkdownAboveLines(): number {
+        return this.config.get<number>("commitMessage.outlineAddedMarkdownAboveLines", 150);
+    }
+
+    get commitMessageMaxDiffLineLength(): number {
+        return this.config.get<number>("commitMessage.maxDiffLineLength", 160);
+    }
+
     get commitMessageExcludeGlobs(): string[] {
         return this.config.get<string[]>("commitMessage.excludeGlobs", DEFAULT_COMMIT_MESSAGE_EXCLUDES);
     }

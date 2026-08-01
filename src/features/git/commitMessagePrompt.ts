@@ -126,10 +126,18 @@ Reply with the commit message and nothing else. No code fences, no preamble, no 
 surrounding quotes. The first line is the title. The reply is written straight into the commit
 message box, so anything that is not part of the message ends up in the repository history.
 
-The diff you are given has been compacted: hashes and line numbers are removed, hunk headers keep
-only the enclosing declaration, and a file marked \`(formatting only)\`, \`(import/export changes
-only)\` or \`(binary)\` changed in that way and no other. Files listed as excluded from the diff did
-change — you just cannot see how, so describe them only from their names.`;
+The diff you are given has been compacted. The compaction is not part of the change, so never
+describe it:
+
+- Hashes, line numbers and surrounding context are removed; a hunk header keeps only the enclosing declaration
+- A file marked \`(formatting only)\`, \`(import/export changes only)\` or \`(binary)\` changed in that way and no other
+- Under \`@@ new file, declarations only\`, a new file is shown as its declaration surface. \`{ /* 12 lines */ }\` stands for a body that was written but is not shown — it is not an empty or unfinished function
+- Under \`@@ new file, headings only\`, a new document is shown as its headings, with \`<12 lines>\` standing for the prose between them
+- A deleted file is listed by name with no body; its contents were removed in full
+- A line ending in \`…\` was truncated here, not shortened by the author
+
+Files listed as excluded from the diff did change — you just cannot see how, so describe them only
+from their names.`;
 
 export function buildSystemPrompt(additionalInstructions: string): string {
     const extra = additionalInstructions.trim();

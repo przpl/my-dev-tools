@@ -1,10 +1,17 @@
 import * as assert from "assert";
 
-import { cleanDiff, parseDiff, renderDiff } from "../../../features/git/diffCleaner";
+import { cleanDiff, parseDiff, renderDiff, type CleanDiffOptions } from "../../../features/git/diffCleaner";
 
-const GENEROUS = { maxCharacters: 100000, stripImportsAboveLines: 100000 };
+/** Every budget wide open, so a test only exercises the option it sets. */
+const GENEROUS: CleanDiffOptions = {
+    maxCharacters: 100000,
+    stripImportsAboveLines: 100000,
+    summarizeAddedScriptsAboveLines: 0,
+    outlineAddedMarkdownAboveLines: 0,
+    maxLineLength: 0,
+};
 
-function clean(raw: string, overrides: Partial<typeof GENEROUS> & { formattingOnlyPaths?: Set<string> } = {}): string {
+function clean(raw: string, overrides: Partial<CleanDiffOptions> = {}): string {
     return cleanDiff(raw, { ...GENEROUS, ...overrides });
 }
 
@@ -340,6 +347,130 @@ suite("DiffCleaner Tests", () => {
         });
     });
 
+    suite("added file summaries", () => {
+        function addedFile(path: string, lines: string[]): string {
+            return [
+                `diff --git a/${path} b/${path}`,
+                "new file mode 100644",
+                "index 0000000..1234567",
+                "--- /dev/null",
+                `+++ b/${path}`,
+                `@@ -0,0 +1,${lines.length} @@`,
+                ...lines.map(line => `+${line}`),
+            ].join("\n");
+        }
+
+        /** A file long enough to cross the threshold, whose bodies are the bulk of it. */
+        function bigScript(): string[] {
+            const lines = ["import { helper } from './helper';", "", "export interface Options {", "    retries: number;", "}", ""];
+
+            for (let i = 0; i < 10; i++) {
+                lines.push(
+                    `/** Doc comment for step ${i}. */`,
+                    `export function step${i}(options: Options): number {`,
+                    `    const base = options.retries * ${i};`,
+                    "    let total = 0;",
+                    "    for (let n = 0; n < base; n++) {",
+                    "        total += n;",
+                    "    }",
+                    "    return total;",
+                    "}",
+                    ""
+                );
+            }
+
+            return lines;
+        }
+
+        test("should reduce a large new script to its declarations", () => {
+            const cleaned = clean(addedFile("src/steps.ts", bigScript()), { summarizeAddedScriptsAboveLines: 60 });
+
+            assert.ok(cleaned.includes("@@ new file, declarations only"));
+            assert.ok(cleaned.includes("+export function step0(options: Options): number { /* 8 lines */ }"));
+            assert.ok(cleaned.includes("+export interface Options {"), "Types survive");
+            assert.ok(cleaned.includes("+/** Doc comment for step 0. */"), "Comments survive");
+            assert.ok(cleaned.includes("+import { helper } from './helper';"), "Imports survive");
+            assert.ok(!cleaned.includes("total += n;"), "Statement bodies are gone");
+        });
+
+        test("should leave a new script shorter than the threshold alone", () => {
+            const raw = addedFile("src/small.ts", ["export function tiny() {", "    return 1 + 1;", "}"]);
+
+            assert.ok(clean(raw, { summarizeAddedScriptsAboveLines: 60 }).includes("+    return 1 + 1;"));
+        });
+
+        test("should leave a new script alone when summarizing is disabled", () => {
+            const cleaned = clean(addedFile("src/steps.ts", bigScript()), { summarizeAddedScriptsAboveLines: 0 });
+
+            assert.ok(cleaned.includes("total += n;"));
+        });
+
+        test("should not summarize a file that does not parse", () => {
+            const broken = Array.from({ length: 80 }, (_, i) => `function broken${i}( {{{`);
+            const cleaned = clean(addedFile("src/broken.ts", broken), { summarizeAddedScriptsAboveLines: 60 });
+
+            assert.ok(cleaned.includes("+function broken0( {{{"));
+        });
+
+        test("should not summarize a modified file, whose hunks are not a whole program", () => {
+            const raw = [
+                "diff --git a/src/app.ts b/src/app.ts",
+                "--- a/src/app.ts",
+                "+++ b/src/app.ts",
+                "@@ -1,2 +1,2 @@ export function run() {",
+                "-    const a = 1;",
+                "+    const a = 2;",
+            ].join("\n");
+
+            assert.ok(clean(raw, { summarizeAddedScriptsAboveLines: 1 }).includes("+    const a = 2;"));
+        });
+
+        test("should reduce a large new document to its headings", () => {
+            const lines: string[] = [];
+            for (let i = 0; i < 20; i++) {
+                lines.push(`## Section ${i}`, "", "Some prose that explains the section in detail.", "");
+            }
+
+            const cleaned = clean(addedFile("docs/guide.md", lines), { outlineAddedMarkdownAboveLines: 10 });
+
+            assert.ok(cleaned.includes("@@ new file, headings only"));
+            assert.ok(cleaned.includes("+## Section 0"));
+            assert.ok(!cleaned.includes("Some prose"));
+            assert.ok(/\+<\d+ lines>/.test(cleaned), "Dropped prose is counted");
+        });
+
+        test("should leave a new document alone when outlining is disabled", () => {
+            const lines = Array.from({ length: 40 }, (_, i) => (i % 4 === 0 ? `## Section ${i}` : "Some prose."));
+
+            assert.ok(clean(addedFile("docs/guide.md", lines), { outlineAddedMarkdownAboveLines: 0 }).includes("+Some prose."));
+        });
+    });
+
+    suite("line length cap", () => {
+        test("should truncate a long line and leave a short one alone", () => {
+            const raw = [
+                "diff --git a/src/app.ts b/src/app.ts",
+                "--- a/src/app.ts",
+                "+++ b/src/app.ts",
+                "@@ -1,2 +1,2 @@",
+                " const short = 1;",
+                `+const blob = "${"x".repeat(500)}";`,
+            ].join("\n");
+
+            const cleaned = clean(raw, { maxLineLength: 40 });
+
+            assert.ok(cleaned.includes(" const short = 1;"), "A short line is untouched");
+            assert.ok(cleaned.includes("…"));
+            assert.ok(cleaned.split("\n").every(line => line.length <= 42));
+        });
+
+        test("should leave every line alone when the cap is disabled", () => {
+            const raw = ["diff --git a/a.ts b/a.ts", "--- a/a.ts", "+++ b/a.ts", "@@ -1 +1 @@", `+${"y".repeat(300)}`].join("\n");
+
+            assert.ok(clean(raw, { maxLineLength: 0 }).includes("y".repeat(300)));
+        });
+    });
+
     suite("parseDiff", () => {
         test("should round-trip a path containing spaces", () => {
             const raw = [
@@ -356,6 +487,30 @@ suite("DiffCleaner Tests", () => {
                 parseDiff(raw).map(file => file.path),
                 ["a file with spaces.ts"]
             );
+        });
+
+        test("should recover the path of a body-less deletion from the diff --git header", () => {
+            // What `git diff -D` emits: a header and nothing else.
+            const raw = ["diff --git a/.prettierignore b/.prettierignore", "deleted file mode 100644", "index 2e1fa2d..0000000"].join("\n");
+
+            assert.strictEqual(clean(raw), "--- DELETED .prettierignore");
+        });
+
+        test("should recover a body-less deletion whose path contains a space", () => {
+            const raw = ["diff --git a/docs/old notes.md b/docs/old notes.md", "deleted file mode 100644", "index 111..000"].join("\n");
+
+            assert.strictEqual(clean(raw), "--- DELETED docs/old notes.md");
+        });
+
+        test("should still name both sides of a rename from its own lines", () => {
+            const raw = [
+                "diff --git a/src/old.ts b/src/new.ts",
+                "similarity index 100%",
+                "rename from src/old.ts",
+                "rename to src/new.ts",
+            ].join("\n");
+
+            assert.strictEqual(clean(raw), "RENAMED src/old.ts -> src/new.ts");
         });
 
         test("should treat a bare empty line inside a hunk as a context line", () => {

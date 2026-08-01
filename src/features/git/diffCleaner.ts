@@ -1,7 +1,10 @@
+import { isMarkdownFile, outlineMarkdown, summarizeScript } from "./addedFileSummary";
+
 /**
  * Compacts a unified diff into the smallest text that still answers "what changed". Everything a
  * commit message can never use — blob hashes, line numbers, file-mode bookkeeping, reformats,
- * import shuffling in a large change — is removed before the diff is sent to a model.
+ * import shuffling in a large change, the body of a whole file being added or deleted — is removed
+ * before the diff is sent to a model.
  *
  * Pure text in, pure text out: no `vscode` and no `child_process`, so it is testable on its own.
  */
@@ -41,6 +44,12 @@ export interface CleanDiffOptions {
     stripImportsAboveLines: number;
     /** Repository-relative paths already proven to be reformats of the same source. */
     formattingOnlyPaths?: ReadonlySet<string>;
+    /** Above this many added lines, a new script file is reduced to its declarations. 0 disables it. */
+    summarizeAddedScriptsAboveLines?: number;
+    /** Above this many added lines, a new document is reduced to its headings. 0 disables it. */
+    outlineAddedMarkdownAboveLines?: number;
+    /** Payload length each diff line is capped at, so one minified or embedded line costs a fixed price. 0 disables it. */
+    maxLineLength?: number;
 }
 
 /** Strips the `a/` or `b/` that `git diff` puts in front of every path. */
@@ -58,6 +67,16 @@ function readPath(line: string, marker: string): string | undefined {
     return value === "/dev/null" ? undefined : stripPrefix(value);
 }
 
+/**
+ * The path out of a `diff --git a/x b/x` line, which is the only place it appears when `-D` prints a
+ * deleted file as a header with no body. The two halves must match for the split to be unambiguous,
+ * since a path may itself contain " b/"; a rename names both sides on its own lines anyway.
+ */
+function readHeaderPath(line: string): string | undefined {
+    const match = /^diff --git (?:a\/(.+) b\/\1|"a\/(.+)" "b\/\2")$/.exec(line.trim());
+    return match ? match[1] ?? match[2] : undefined;
+}
+
 export function parseDiff(raw: string): DiffFile[] {
     const files: DiffFile[] = [];
     let file: DiffFile | undefined;
@@ -70,9 +89,17 @@ export function parseDiff(raw: string): DiffFile[] {
         return file;
     };
 
-    for (const line of raw.split("\n")) {
+    const lines = raw.split("\n");
+
+    // A trailing newline splits into one empty element, which is not the blank context line below.
+    if (lines[lines.length - 1] === "") {
+        lines.pop();
+    }
+
+    for (const line of lines) {
         if (line.startsWith("diff --git ")) {
-            startFile();
+            // Provisional: a later `+++` or `rename to` line overrides it, and `+++ /dev/null` cannot.
+            startFile().path = readHeaderPath(line) ?? "";
             continue;
         }
 
@@ -243,6 +270,87 @@ function stripImportChurn(files: DiffFile[]): DiffFile[] {
     });
 }
 
+/**
+ * The source of a file the diff is introducing whole, or undefined when the hunks are an edit rather
+ * than a whole file: every body line has to be an addition for the `+` text to be the entire file.
+ */
+function addedFileSource(file: DiffFile): string | undefined {
+    if (file.note || file.kind !== "added" || file.hunks.length === 0) {
+        return undefined;
+    }
+
+    const lines: string[] = [];
+
+    for (const hunk of file.hunks) {
+        for (const line of hunk.lines) {
+            if (!line.startsWith("+")) {
+                return undefined;
+            }
+            lines.push(line.slice(1));
+        }
+    }
+
+    return lines.join("\n");
+}
+
+/**
+ * Replaces the body of a large new file with its shape. A new file arrives as one `+` line per
+ * source line, so it is the densest thing in any diff that adds one — and the least informative per
+ * token, because a commit message describes what the file is for, not how each function is written.
+ */
+function summarizeAddedFiles(files: DiffFile[], options: CleanDiffOptions): DiffFile[] {
+    const scriptThreshold = options.summarizeAddedScriptsAboveLines ?? 0;
+    const markdownThreshold = options.outlineAddedMarkdownAboveLines ?? 0;
+
+    if (scriptThreshold <= 0 && markdownThreshold <= 0) {
+        return files;
+    }
+
+    return files.map(file => {
+        const source = addedFileSource(file);
+        if (source === undefined) {
+            return file;
+        }
+
+        const lineCount = source.split("\n").length;
+        let summary: string | undefined;
+        let label: string | undefined;
+
+        if (SCRIPT_FILE.test(file.path) && scriptThreshold > 0 && lineCount > scriptThreshold) {
+            summary = summarizeScript(file.path, source);
+            label = "new file, declarations only";
+        } else if (isMarkdownFile(file.path) && markdownThreshold > 0 && lineCount > markdownThreshold) {
+            summary = outlineMarkdown(source);
+            label = "new file, headings only";
+        }
+
+        if (!summary || !label) {
+            return file;
+        }
+
+        return { ...file, hunks: [{ context: label, lines: summary.split("\n").map(line => `+${line}`) }] };
+    });
+}
+
+/**
+ * Caps the payload of each body line. A minified bundle, an embedded data URI or a long generated
+ * string is understood from its opening; the rest is paid for and never read.
+ */
+function capLineLengths(files: DiffFile[], maxLineLength: number): DiffFile[] {
+    if (maxLineLength <= 0) {
+        return files;
+    }
+
+    return files.map(file => ({
+        ...file,
+        // The sign is not part of the payload, so the cap is measured after it.
+        hunks: file.hunks.map(hunk => ({
+            ...hunk,
+            lines: hunk.lines.map(line => (line.length > maxLineLength + 1 ? `${line.slice(0, maxLineLength + 1)}…` : line)),
+        })),
+    }));
+}
+
 function dropContextLines(files: DiffFile[]): DiffFile[] {
     return files.map(file => ({
         ...file,
@@ -354,6 +462,10 @@ export function cleanDiff(raw: string, options: CleanDiffOptions): string {
             ? { ...file, hunks: [], note: "formatting only" }
             : file
     );
+
+    // Summarizing runs first: it parses the `+` lines as source, which a capped line would break.
+    files = summarizeAddedFiles(files, options);
+    files = capLineLengths(files, options.maxLineLength ?? 0);
 
     if (renderDiff(files).split("\n").length > options.stripImportsAboveLines) {
         files = stripImportChurn(files);

@@ -46,6 +46,9 @@ export async function buildCommitContext(gitRoot: string, options: GenerateOptio
         diff: cleanDiff(collected.diff, {
             maxCharacters: Config.commitMessageMaxDiffCharacters,
             stripImportsAboveLines: Config.commitMessageStripImportsAboveLines,
+            summarizeAddedScriptsAboveLines: Config.commitMessageSummarizeAddedScriptsAboveLines,
+            outlineAddedMarkdownAboveLines: Config.commitMessageOutlineAddedMarkdownAboveLines,
+            maxLineLength: Config.commitMessageMaxDiffLineLength,
             formattingOnlyPaths: collected.formattingOnlyPaths,
         }),
     };

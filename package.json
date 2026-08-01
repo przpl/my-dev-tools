@@ -82,6 +82,24 @@
                     "minimum": 0,
                     "description": "Once the compacted diff exceeds this many lines, hunks containing nothing but import and re-export changes are dropped"
                 },
+                "myDevTools.commitMessage.summarizeAddedScriptsAboveLines": {
+                    "type": "number",
+                    "default": 60,
+                    "minimum": 0,
+                    "description": "A newly added TypeScript or JavaScript file longer than this is reduced to its declarations: imports, types, signatures, constants and comments are kept, function bodies become a line count. Set to 0 to always send new files in full"
+                },
+                "myDevTools.commitMessage.outlineAddedMarkdownAboveLines": {
+                    "type": "number",
+                    "default": 150,
+                    "minimum": 0,
+                    "description": "A newly added Markdown file longer than this is reduced to its headings. Raise it, or set it to 0, in a repository where documents are the product rather than supporting material"
+                },
+                "myDevTools.commitMessage.maxDiffLineLength": {
+                    "type": "number",
+                    "default": 160,
+                    "minimum": 0,
+                    "description": "Each diff line is truncated to this many characters, so one minified or embedded line costs a fixed price. Set to 0 to send every line in full"
+                },
                 "myDevTools.commitMessage.excludeGlobs": {
                     "type": "array",
                     "items": {
