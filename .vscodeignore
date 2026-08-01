@@ -1,4 +1,7 @@
+.claude/
 .vscode
+AGENTS.md
+CLAUDE.md
 node_modules
 src/
 tsconfig.json
