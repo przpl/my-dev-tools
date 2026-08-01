@@ -6,7 +6,9 @@
             "type": "extensionHost",
             "request": "launch",
             "runtimeExecutable": "${execPath}",
-            "args": ["--extensionDevelopmentPath=${workspaceRoot}"]
+            // The scm/inputBox button needs a proposed API. Extension development mode only grants
+            // proposals on Insiders builds, so stable VS Code needs the flag spelled out here too.
+            "args": ["--extensionDevelopmentPath=${workspaceRoot}", "--enable-proposed-api=przpl.my-dev-tools"]
         }
     ]
 }

@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 import * as path from "path";
 
+import { collectResourceUris } from "./autoStage";
+import { promptForCommitMessage } from "./commitMessageEditor";
 import { execGit, findGitRoot, toGitPath } from "./gitCli";
 
 /** Absolute paths of the files that currently have something in the index. */
@@ -22,34 +24,13 @@ async function getStagedFiles(gitRoot: string): Promise<string[]> {
     return staged;
 }
 
-
 export async function quickCommit(...args: unknown[]): Promise<void> {
-    // Handle different invocation scenarios from SCM context menus
-    let resourceStates: vscode.SourceControlResourceState[] = [];
+    const filePaths = [...new Set(collectResourceUris(args).map(uri => uri.fsPath))];
 
-    // VS Code passes multiple selected resources as separate arguments, not as an array
-    // Each argument is a resource state object with resourceUri property
-    for (const arg of args) {
-        if (arg && typeof arg === 'object') {
-            // Check if it's a resource group (has resourceStates property)
-            if ('resourceStates' in arg) {
-                const group = arg as vscode.SourceControlResourceGroup;
-                resourceStates.push(...group.resourceStates);
-            }
-            // Check if it's a resource state (has resourceUri property)
-            else if ('resourceUri' in arg) {
-                resourceStates.push(arg as vscode.SourceControlResourceState);
-            }
-        }
-    }
-
-    if (resourceStates.length === 0) {
+    if (filePaths.length === 0) {
         vscode.window.showErrorMessage("No files selected for Quick Commit.");
         return;
     }
-
-    // Get unique URIs and convert to file paths
-    const filePaths = [...new Set(resourceStates.map((state) => state.resourceUri.fsPath))];
 
     // Find Git root for the first file
     const gitRoot = await findGitRoot(path.dirname(filePaths[0]));
@@ -60,7 +41,7 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
 
     // Verify all files belong to the same repository
     const allSameRepo = await Promise.all(
-        filePaths.map(async (filePath) => {
+        filePaths.map(async filePath => {
             const root = await findGitRoot(path.dirname(filePath));
             return root === gitRoot;
         })
@@ -71,19 +52,9 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
         return;
     }
 
-    // Prompt for commit message
-    const commitMessage = await vscode.window.showInputBox({
-        prompt: "Enter commit message",
-        placeHolder: "Commit message",
-        ignoreFocusOut: true,
-        validateInput: (value) => {
-            if (!value || value.trim().length === 0) {
-                return "Commit message cannot be empty";
-            }
-            return null;
-        },
-    });
+    const gitPaths = filePaths.map(filePath => toGitPath(gitRoot, filePath));
 
+    const commitMessage = await promptForCommitMessage(gitRoot, gitPaths);
     if (!commitMessage) {
         // User cancelled
         return;
@@ -100,7 +71,7 @@ export async function quickCommit(...args: unknown[]): Promise<void> {
 
         // Commit only the selected files
         // Note: git commit -- <files> commits only specified files and leaves other staged files in the staging area
-        await execGit(gitRoot, ["commit", "-m", commitMessage.trim(), "--", ...filePaths.map(fp => toGitPath(gitRoot, fp))]);
+        await execGit(gitRoot, ["commit", "-m", commitMessage.trim(), "--", ...gitPaths]);
 
         const fileCount = filePaths.length;
         const fileWord = fileCount === 1 ? "file" : "files";

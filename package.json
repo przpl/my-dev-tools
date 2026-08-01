@@ -31,6 +31,9 @@
         "onStartupFinished"
     ],
     "main": "./out/extension.js",
+    "enabledApiProposals": [
+        "contribSourceControlInputBoxMenu"
+    ],
     "contributes": {
         "configuration": {
             "title": "My Dev Tools",
@@ -56,6 +59,58 @@
                         "Convert to kebab-case"
                     ],
                     "description": "Naming strategy to use when auto-renaming files based on exported symbols"
+                },
+                "myDevTools.openRouter.model": {
+                    "type": "string",
+                    "default": "openai/gpt-5.6-luna",
+                    "description": "OpenRouter model used to generate commit messages"
+                },
+                "myDevTools.openRouter.baseUrl": {
+                    "type": "string",
+                    "default": "https://openrouter.ai/api/v1",
+                    "description": "OpenRouter API base URL"
+                },
+                "myDevTools.commitMessage.maxDiffCharacters": {
+                    "type": "number",
+                    "default": 80000,
+                    "minimum": 2000,
+                    "description": "Character budget for the diff sent to the model. Above it, context lines are dropped and then each file is truncated to a share of the budget"
+                },
+                "myDevTools.commitMessage.stripImportsAboveLines": {
+                    "type": "number",
+                    "default": 200,
+                    "minimum": 0,
+                    "description": "Once the compacted diff exceeds this many lines, hunks containing nothing but import and re-export changes are dropped"
+                },
+                "myDevTools.commitMessage.excludeGlobs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "**/package-lock.json",
+                        "**/npm-shrinkwrap.json",
+                        "**/pnpm-lock.yaml",
+                        "**/yarn.lock",
+                        "**/bun.lockb",
+                        "**/*.lock",
+                        "**/go.sum",
+                        "**/*.min.js",
+                        "**/*.min.css",
+                        "**/*.map",
+                        "**/*.svg",
+                        "**/__snapshots__/**",
+                        "**/dist/**",
+                        "**/build/**",
+                        "**/vendor/**"
+                    ],
+                    "description": "Files excluded from the diff sent to the model. They are still listed by name, so a dependency bump remains recognisable"
+                },
+                "myDevTools.commitMessage.additionalInstructions": {
+                    "type": "string",
+                    "default": "",
+                    "editPresentation": "multilineText",
+                    "description": "Extra instructions appended to the commit message prompt, for project-specific conventions"
                 }
             }
         },
@@ -138,6 +193,29 @@
                 "title": "Stage Active File"
             },
             {
+                "command": "myDevTools.generateCommitMessage",
+                "title": "Generate Commit Message (My Dev Tools)",
+                "icon": "$(sparkle)"
+            },
+            {
+                "command": "myDevTools.acceptCommitMessage",
+                "title": "Commit",
+                "icon": "$(check)"
+            },
+            {
+                "command": "myDevTools.generateCommitMessageInEditor",
+                "title": "Generate Commit Message (My Dev Tools)",
+                "icon": "$(sparkle)"
+            },
+            {
+                "command": "myDevTools.setOpenRouterApiKey",
+                "title": "Set OpenRouter API Key"
+            },
+            {
+                "command": "myDevTools.clearOpenRouterApiKey",
+                "title": "Clear OpenRouter API Key"
+            },
+            {
                 "command": "myDevTools.showExplorerFiles",
                 "title": "Show Hidden Files in Explorer",
                 "icon": "$(eye)"
@@ -202,6 +280,31 @@
                     "group": "rename"
                 }
             ],
+            "editor/title": [
+                {
+                    "command": "myDevTools.generateCommitMessageInEditor",
+                    "when": "resourceFilename == MY_DEV_TOOLS_COMMIT_EDITMSG",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "myDevTools.acceptCommitMessage",
+                    "when": "resourceFilename == MY_DEV_TOOLS_COMMIT_EDITMSG",
+                    "group": "navigation@2"
+                }
+            ],
+            "scm/inputBox": [
+                {
+                    "command": "myDevTools.generateCommitMessage",
+                    "when": "scmProvider == git"
+                }
+            ],
+            "scm/title": [
+                {
+                    "command": "myDevTools.generateCommitMessage",
+                    "when": "scmProvider == git",
+                    "group": "navigation"
+                }
+            ],
             "scm/resourceState/context": [
                 {
                     "command": "myDevTools.quickCommit",
@@ -225,6 +328,14 @@
                 {
                     "command": "myDevTools.quickCommit",
                     "when": "false"
+                },
+                {
+                    "command": "myDevTools.acceptCommitMessage",
+                    "when": "resourceFilename == MY_DEV_TOOLS_COMMIT_EDITMSG"
+                },
+                {
+                    "command": "myDevTools.generateCommitMessageInEditor",
+                    "when": "resourceFilename == MY_DEV_TOOLS_COMMIT_EDITMSG"
                 },
                 {
                     "command": "myDevTools.updatePropsDestructuring",
@@ -295,6 +406,12 @@
                 "key": "ctrl+alt+s",
                 "mac": "cmd+alt+s",
                 "when": "isInDiffEditor"
+            },
+            {
+                "command": "myDevTools.acceptCommitMessage",
+                "key": "ctrl+enter",
+                "mac": "cmd+enter",
+                "when": "editorTextFocus && resourceFilename == MY_DEV_TOOLS_COMMIT_EDITMSG"
             }
         ]
     },
@@ -303,8 +420,8 @@
         "pack": "npm run vscode:prepublish && vsce package",
         "type-check": "tsc --pretty --noEmit",
         "vscode:prepublish": "npm run esbuild-base -- --minify",
-        "esbuild-base": "rimraf out && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
-        "publish": "vsce publish",
+        "esbuild-base": "rimraf out && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --alias:jsonc-parser=jsonc-parser/lib/esm/main.js",
+        "publish": "vsce publish --allow-proposed-apis contribSourceControlInputBoxMenu",
         "test": "npm run compile-tests && node ./out/test/test/runTest.js",
         "compile-tests": "tsc -p ./src/test/tsconfig.json",
         "pretest": "npm run compile-tests"

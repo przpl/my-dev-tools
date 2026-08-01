@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 
+import { mapWithLimit } from "../../utils/concurrency";
 import { isFormattingOnlyChange, isSupportedFile } from "./formattingOnly";
 import { execGit, execGitWithStdin, findGitRoot } from "./gitCli";
 
@@ -68,21 +69,6 @@ async function readWorkingTreeContent(gitRoot: string, file: string): Promise<st
     }
 }
 
-async function mapWithLimit<T, R>(items: T[], limit: number, map: (item: T) => Promise<R>): Promise<R[]> {
-    const results = new Array<R>(items.length);
-    let next = 0;
-
-    const worker = async (): Promise<void> => {
-        while (next < items.length) {
-            const index = next++;
-            results[index] = await map(items[index]);
-        }
-    };
-
-    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-    return results;
-}
-
 async function isCosmeticChange(gitRoot: string, file: string): Promise<boolean> {
     const [before, after] = await Promise.all([readIndexContent(gitRoot, file), readWorkingTreeContent(gitRoot, file)]);
     if (before === undefined || after === undefined) {
@@ -107,7 +93,7 @@ export async function findAutoStageableFiles(gitRoot: string): Promise<string[]>
 }
 
 /** VS Code passes the clicked resource group, or the individual resource states, as separate arguments. */
-function collectResourceUris(args: unknown[]): vscode.Uri[] {
+export function collectResourceUris(args: unknown[]): vscode.Uri[] {
     const uris: vscode.Uri[] = [];
 
     for (const arg of args) {

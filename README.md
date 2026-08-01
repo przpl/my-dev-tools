@@ -68,11 +68,51 @@ This feature allows you to quickly hide or show files in the Explorer based on y
 
 ## Git
 
-| Option            | Available in                             | Description                                                                                                     |
-| ----------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Quick Commit      | Source Control context menu              | Right-click on one or multiple files in the Source Control panel to stage and commit them with a single action.   |
-| Auto Stage        | Source Control panel / Command palette   | Stages every changed file that is the same code as the version already staged, only reformatted.                  |
-| Stage Active File | `Ctrl+Alt+S` in a diff / Command palette | Stages the file you are currently looking at, without leaving the diff editor.                                    |
+| Option                  | Available in                             | Description                                                                                                     |
+| ----------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Generate Commit Message (My Dev Tools) | Source Control title bar / Command palette | Writes a Conventional Commits message for the pending change, using any model available through OpenRouter.  |
+| Quick Commit            | Source Control context menu              | Right-click on one or multiple files in the Source Control panel to stage and commit them with a single action. |
+| Auto Stage              | Source Control panel / Command palette   | Stages every changed file that is the same code as the version already staged, only reformatted.                  |
+| Stage Active File       | `Ctrl+Alt+S` in a diff / Command palette | Stages the file you are currently looking at, without leaving the diff editor.                                    |
+
+### Generate Commit Message
+
+Fills the Source Control message box with a message that follows Conventional Commits. Press the sparkle icon in the Source Control **title bar**, or run "Generate Commit Message (My Dev Tools)" from the palette.
+
+Before the first use, run "Set OpenRouter API Key" and paste a key from [openrouter.ai/keys](https://openrouter.ai/keys). It is kept in VS Code's secret storage; `OPENROUTER_API_KEY` in the environment is used as a fallback. The model is `myDevTools.openRouter.model` and can be anything OpenRouter serves.
+
+Whatever you have already typed into the message box is sent along as a hint about your intent, then replaced by the finished message.
+
+#### Settings
+
+| Setting                                          | Default                      | Purpose                                                                              |
+| ------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------ |
+| `myDevTools.openRouter.model`                    | `openai/gpt-5.6-luna`        | Any model id OpenRouter serves.                                                       |
+| `myDevTools.openRouter.baseUrl`                  | `https://openrouter.ai/api/v1` | For a proxy or a self-hosted gateway.                                                |
+| `myDevTools.commitMessage.maxDiffCharacters`     | `80000`                      | Character budget for the diff.                                                        |
+| `myDevTools.commitMessage.stripImportsAboveLines` | `200`                        | Line count past which import churn is dropped.                                        |
+| `myDevTools.commitMessage.excludeGlobs`          | lock files, bundles, `dist/`  | Paths listed by name but never diffed.                                                |
+| `myDevTools.commitMessage.additionalInstructions` | empty                        | Appended to the prompt, for project-specific conventions.                             |
+
+#### Not working yet: the button inside the message box
+
+**Out of the box you get the title bar icon only. The sparkle inside the commit message box - where Copilot's sits - does not appear, and cannot be made to appear by installing the extension.**
+
+That spot is the `scm/inputBox` contribution point, which is still a **proposed API** (`contribSourceControlInputBoxMenu`). VS Code ignores proposed contributions from any extension not explicitly allowed on the machine, so there is no way to ship it enabled - that gate is the whole point of a proposed API.
+
+To turn it on for yourself, run "Preferences: Configure Runtime Arguments" from the palette, add the extension to `argv.json`, and restart VS Code:
+
+```jsonc
+{
+    "enable-proposed-api": ["przpl.my-dev-tools"]
+}
+```
+
+Caveats once you have done that:
+
+-   It is per machine. Every machine you use needs the same `argv.json` edit; it does not travel with Settings Sync.
+-   It can break on a VS Code update. If the proposal is ever finalized, renamed, or dropped, the button disappears again until the extension is rebuilt against whatever replaced it.
+-   Everything else works without it. The title bar icon and the palette command are on stable API and need no flags.
 
 ### Quick Commit
 
@@ -81,8 +121,8 @@ This feature allows you to quickly stage and commit selected files from the Sour
 1. Open the Source Control panel (Ctrl+Shift+G)
 2. Right-click on one or more changed files
 3. Select "Quick Commit..." from the context menu
-4. Enter your commit message in the input box
-5. The selected files will be staged and committed
+4. Write the commit message in the editor that opens, or press the sparkle icon to have one written from the diff of just those files
+5. Press `Ctrl+Enter` (`Cmd+Enter` on macOS), or the check mark in the editor title bar, to stage and commit the selection
 
 ### Auto Stage
 

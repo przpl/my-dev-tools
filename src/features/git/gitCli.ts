@@ -17,6 +17,19 @@ export async function execGit(cwd: string, args: string[]): Promise<string> {
 }
 
 /**
+ * Runs git and returns stdout even when the exit code is non-zero. `git diff` reports "differences
+ * found" as exit 1, so a caller that wants the diff rather than the verdict has to ignore the code.
+ */
+export async function execGitRaw(cwd: string, args: string[]): Promise<string> {
+    try {
+        const { stdout } = await execFileAsync("git", args, { cwd, maxBuffer: MAX_BUFFER, windowsHide: true });
+        return stdout;
+    } catch (error: any) {
+        return typeof error?.stdout === "string" ? error.stdout : "";
+    }
+}
+
+/**
  * Runs git with `input` piped to stdin. Used for path lists, which would otherwise be capped by the
  * OS command-line length limit once a repository has enough changed files.
  */
@@ -39,6 +52,19 @@ export async function findGitRoot(cwd: string): Promise<string | undefined> {
     try {
         const root = (await execGit(cwd, ["rev-parse", "--show-toplevel"])).trim();
         return root ? path.normalize(root) : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * The `.git` directory itself, which is not always `<root>/.git`: in a linked worktree or a
+ * submodule it lives elsewhere and `.git` is a file pointing at it.
+ */
+export async function findGitDir(cwd: string): Promise<string | undefined> {
+    try {
+        const gitDir = (await execGit(cwd, ["rev-parse", "--absolute-git-dir"])).trim();
+        return gitDir ? path.normalize(gitDir) : undefined;
     } catch {
         return undefined;
     }

@@ -17,9 +17,15 @@ import { renameToCamelCase, renameToPascalCase, renameToSnakeCase, renameToKebab
 import { quickCommit } from "./features/git/quickCommit";
 import { stageActiveFile } from "./features/git/stageActiveFile";
 import { autoStage } from "./features/git/autoStage";
+import { generateCommitMessageCommand } from "./features/git/generateCommitMessage";
+import { acceptCommitMessage, generateCommitMessageInEditor } from "./features/git/commitMessageEditor";
 import { registerExplorerFileVisibility } from "./features/explorer/toggleFileVisibility";
+import { initOpenRouter } from "./services/openRouter";
 
 export function activate(context: vscode.ExtensionContext) {
+    // Services
+    initOpenRouter(context).forEach(cmd => context.subscriptions.push(cmd));
+
     // Generic
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.openNearestIndex", () => openNearestFile("index.ts")));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.deleteEmptyDirectories", deleteEmptyDirectories));
@@ -45,6 +51,9 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.quickCommit", quickCommit));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.autoStage", autoStage));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.stageActiveFile", stageActiveFile));
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.generateCommitMessage", generateCommitMessageCommand));
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.acceptCommitMessage", acceptCommitMessage));
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.generateCommitMessageInEditor", generateCommitMessageInEditor));
 
     // Explorer
     const explorerCommands = registerExplorerFileVisibility(context);
