@@ -15,6 +15,7 @@ import { addPropsToComponent } from "./features/react/addPropsToComponent";
 import { addUndefinedPropsToInterface } from "./features/react/addUndefinedPropsToInterface";
 import { renameToCamelCase, renameToPascalCase, renameToSnakeCase, renameToKebabCase, autoRename } from "./features/renameFile";
 import { quickCommit } from "./features/git/quickCommit";
+import { commitToBranch } from "./features/git/commitToBranch";
 import { stageActiveFile } from "./features/git/stageActiveFile";
 import { autoStage } from "./features/git/autoStage";
 import { generateCommitMessageCommand } from "./features/git/generateCommitMessage";
@@ -49,6 +50,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Git
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.quickCommit", quickCommit));
+    context.subscriptions.push(vscode.commands.registerCommand("myDevTools.commitToBranch", commitToBranch));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.autoStage", autoStage));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.stageActiveFile", stageActiveFile));
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.generateCommitMessage", generateCommitMessageCommand));

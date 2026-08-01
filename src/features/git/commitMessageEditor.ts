@@ -27,7 +27,7 @@ interface Session {
 /** One prompt at a time: the editor is modal in practice, and the commands act on what is open. */
 let session: Session | undefined;
 
-function buildComments(paths: string[]): string {
+function buildComments(paths: string[], targetBranch: string | undefined): string {
     const lines = [
         "",
         "Write the commit message above, title first, body after a blank line.",
@@ -36,7 +36,7 @@ function buildComments(paths: string[]): string {
         "Press Ctrl+Enter (Cmd+Enter on macOS), or the check mark in the editor",
         "title bar, to commit. Close this editor to cancel.",
         "",
-        `Committing ${paths.length} ${paths.length === 1 ? "file" : "files"}:`,
+        `Committing ${paths.length} ${paths.length === 1 ? "file" : "files"}${targetBranch ? ` to ${targetBranch}` : ""}:`,
         ...paths.map(filePath => `  ${filePath}`),
     ];
 
@@ -96,16 +96,17 @@ async function finish(message: string | undefined): Promise<void> {
 
 /**
  * Opens the commit message editor and resolves with the message once it is accepted, or with
- * `undefined` if the editor is closed instead.
+ * `undefined` if the editor is closed instead. `targetBranch` names the branch in the comment block
+ * when the commit is not headed for the checked-out one.
  */
-export async function promptForCommitMessage(gitRoot: string, paths: string[]): Promise<string | undefined> {
+export async function promptForCommitMessage(gitRoot: string, paths: string[], targetBranch?: string): Promise<string | undefined> {
     if (session) {
         await finish(undefined);
     }
 
     const gitDir = (await findGitDir(gitRoot)) ?? path.join(gitRoot, ".git");
     const uri = vscode.Uri.file(path.join(gitDir, COMMIT_EDITOR_FILE_NAME));
-    const comments = buildComments(paths);
+    const comments = buildComments(paths, targetBranch);
 
     await vscode.workspace.fs.writeFile(uri, Buffer.from(`\n${comments}\n`, "utf8"));
 

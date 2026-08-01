@@ -184,6 +184,10 @@
                 "title": "Quick Commit..."
             },
             {
+                "command": "myDevTools.commitToBranch",
+                "title": "Commit to Branch..."
+            },
+            {
                 "command": "myDevTools.autoStage",
                 "title": "Auto Stage",
                 "icon": "$(sparkle)"
@@ -310,6 +314,11 @@
                     "command": "myDevTools.quickCommit",
                     "when": "scmProvider == git",
                     "group": "1_modification"
+                },
+                {
+                    "command": "myDevTools.commitToBranch",
+                    "when": "scmProvider == git",
+                    "group": "1_modification"
                 }
             ],
             "scm/resourceGroup/context": [
@@ -327,6 +336,10 @@
             "commandPalette": [
                 {
                     "command": "myDevTools.quickCommit",
+                    "when": "false"
+                },
+                {
+                    "command": "myDevTools.commitToBranch",
                     "when": "false"
                 },
                 {

@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
 import * as path from "path";
 
-import { collectResourceUris } from "./autoStage";
 import { promptForCommitMessage } from "./commitMessageEditor";
-import { execGit, findGitRoot, toGitPath } from "./gitCli";
+import { execGit, toGitPath } from "./gitCli";
+import { resolveSelectedFiles } from "./selectedFiles";
 
 /** Absolute paths of the files that currently have something in the index. */
 async function getStagedFiles(gitRoot: string): Promise<string[]> {
@@ -25,33 +25,12 @@ async function getStagedFiles(gitRoot: string): Promise<string[]> {
 }
 
 export async function quickCommit(...args: unknown[]): Promise<void> {
-    const filePaths = [...new Set(collectResourceUris(args).map(uri => uri.fsPath))];
-
-    if (filePaths.length === 0) {
-        vscode.window.showErrorMessage("No files selected for Quick Commit.");
+    const selection = await resolveSelectedFiles(args, "Quick Commit");
+    if (!selection) {
         return;
     }
 
-    // Find Git root for the first file
-    const gitRoot = await findGitRoot(path.dirname(filePaths[0]));
-    if (!gitRoot) {
-        vscode.window.showErrorMessage("Could not find Git repository for selected files.");
-        return;
-    }
-
-    // Verify all files belong to the same repository
-    const allSameRepo = await Promise.all(
-        filePaths.map(async filePath => {
-            const root = await findGitRoot(path.dirname(filePath));
-            return root === gitRoot;
-        })
-    );
-
-    if (!allSameRepo.every(Boolean)) {
-        vscode.window.showErrorMessage("Selected files must be from the same repository.");
-        return;
-    }
-
+    const { gitRoot, filePaths } = selection;
     const gitPaths = filePaths.map(filePath => toGitPath(gitRoot, filePath));
 
     const commitMessage = await promptForCommitMessage(gitRoot, gitPaths);

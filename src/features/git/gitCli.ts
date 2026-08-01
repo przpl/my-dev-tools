@@ -7,9 +7,14 @@ const execFileAsync = promisify(cp.execFile);
 // Whole-repository diffs comfortably exceed Node's 1 MB default.
 const MAX_BUFFER = 64 * 1024 * 1024;
 
-export async function execGit(cwd: string, args: string[]): Promise<string> {
+/** Overrides layered onto the inherited environment, for the variables git reads such as `GIT_INDEX_FILE`. */
+function withEnv(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv | undefined {
+    return env ? { ...process.env, ...env } : undefined;
+}
+
+export async function execGit(cwd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
     try {
-        const { stdout } = await execFileAsync("git", args, { cwd, maxBuffer: MAX_BUFFER, windowsHide: true });
+        const { stdout } = await execFileAsync("git", args, { cwd, env: withEnv(env), maxBuffer: MAX_BUFFER, windowsHide: true });
         return stdout;
     } catch (error: any) {
         throw new Error(String(error.stderr || error.message || error).trim());
@@ -20,9 +25,9 @@ export async function execGit(cwd: string, args: string[]): Promise<string> {
  * Runs git and returns stdout even when the exit code is non-zero. `git diff` reports "differences
  * found" as exit 1, so a caller that wants the diff rather than the verdict has to ignore the code.
  */
-export async function execGitRaw(cwd: string, args: string[]): Promise<string> {
+export async function execGitRaw(cwd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
     try {
-        const { stdout } = await execFileAsync("git", args, { cwd, maxBuffer: MAX_BUFFER, windowsHide: true });
+        const { stdout } = await execFileAsync("git", args, { cwd, env: withEnv(env), maxBuffer: MAX_BUFFER, windowsHide: true });
         return stdout;
     } catch (error: any) {
         return typeof error?.stdout === "string" ? error.stdout : "";
