@@ -35,6 +35,33 @@
         "contribSourceControlInputBoxMenu"
     ],
     "contributes": {
+        "languages": [
+            {
+                "id": "myDevToolsCommit",
+                "aliases": [
+                    "My Dev Tools Commit Message"
+                ],
+                "filenames": [
+                    "MY_DEV_TOOLS_COMMIT_EDITMSG"
+                ],
+                "configuration": "./language-configuration/my-dev-tools-commit.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "myDevToolsCommit",
+                "scopeName": "text.my-dev-tools-commit",
+                "path": "./syntaxes/my-dev-tools-commit.tmLanguage.json"
+            }
+        ],
+        "configurationDefaults": {
+            "[myDevToolsCommit]": {
+                "editor.rulers": [
+                    50,
+                    72
+                ]
+            }
+        },
         "configuration": {
             "title": "My Dev Tools",
             "properties": {
@@ -453,9 +480,9 @@
         "vscode:prepublish": "npm run esbuild-base -- --minify",
         "esbuild-base": "rimraf out && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --alias:jsonc-parser=jsonc-parser/lib/esm/main.js",
         "publish": "vsce publish --allow-proposed-apis contribSourceControlInputBoxMenu",
-        "test": "npm run compile-tests && node ./out/test/test/runTest.js",
+        "test": "node ./out/test/test/runTest.js",
         "compile-tests": "tsc -p ./src/test/tsconfig.json",
-        "pretest": "npm run compile-tests"
+        "pretest": "npm run esbuild-base && npm run compile-tests"
     },
     "devDependencies": {
         "@types/mocha": "^10.0.10",

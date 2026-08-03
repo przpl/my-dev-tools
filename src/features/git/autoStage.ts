@@ -92,7 +92,11 @@ export async function findAutoStageableFiles(gitRoot: string): Promise<string[]>
     return candidates.filter((_, i) => verdicts[i]);
 }
 
-/** VS Code passes the clicked resource group, or the individual resource states, as separate arguments. */
+/**
+ * VS Code passes the clicked resource group, or the individual resource states, as separate
+ * arguments. A multi-selection arrives as an array in one of them, and the Explorer and the editor
+ * title bar pass bare `Uri`s, so the arguments are walked rather than read one deep.
+ */
 export function collectResourceUris(args: unknown[]): vscode.Uri[] {
     const uris: vscode.Uri[] = [];
 
@@ -101,7 +105,11 @@ export function collectResourceUris(args: unknown[]): vscode.Uri[] {
             continue;
         }
 
-        if ("resourceStates" in arg) {
+        if (Array.isArray(arg)) {
+            uris.push(...collectResourceUris(arg));
+        } else if (arg instanceof vscode.Uri) {
+            uris.push(arg);
+        } else if ("resourceStates" in arg) {
             uris.push(...(arg as vscode.SourceControlResourceGroup).resourceStates.map(state => state.resourceUri));
         } else if ("resourceUri" in arg) {
             uris.push((arg as vscode.SourceControlResourceState).resourceUri);

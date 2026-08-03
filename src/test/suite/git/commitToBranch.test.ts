@@ -7,6 +7,8 @@ import * as vscode from "vscode";
 
 import { commitToBranch } from "../../../features/git/commitToBranch";
 import { COMMIT_EDITOR_FILE_NAME, acceptCommitMessage } from "../../../features/git/commitMessageEditor";
+import { EDITOR_BUTTON_TOOLTIP } from "../../../features/git/commitMessageInput";
+import { restoreInputBox, stubInputBox } from "./fakeInputBox";
 
 function git(cwd: string, args: string[]): string {
     return cp.execFileSync("git", args, { cwd, stdio: "pipe", encoding: "utf8" });
@@ -47,6 +49,7 @@ suite("CommitToBranch Tests", () => {
         vscode.window.showInformationMessage = originalShowInformationMessage;
         vscode.window.showWarningMessage = originalShowWarningMessage;
         vscode.window.showQuickPick = originalShowQuickPick;
+        restoreInputBox();
 
         await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
@@ -100,14 +103,23 @@ suite("CommitToBranch Tests", () => {
         return () => offered;
     }
 
-    /** Runs the command and answers its message editor. Assumes the branch picker is already stubbed. */
+    /** Runs the command and answers its message prompt. Assumes the branch picker is already stubbed. */
     async function runWithMessage(message: string, ...resources: vscode.SourceControlResourceState[]): Promise<void> {
-        const running = commitToBranch(...resources);
-        const editor = await waitForCommitEditor();
+        stubInputBox(input => input.accept(message));
 
-        await editor.edit(builder => builder.replace(new vscode.Range(0, 0, 0, editor.document.lineAt(0).text.length), message));
-        await acceptCommitMessage();
-        await running;
+        await commitToBranch(...resources);
+    }
+
+    /** Records whether the message prompt was reached at all, and dismisses it if it was. */
+    function watchForPrompt(): () => boolean {
+        let asked = false;
+
+        stubInputBox(input => {
+            asked = true;
+            input.cancel();
+        });
+
+        return () => asked;
     }
 
     function subjects(rev: string): string[] {
@@ -177,12 +189,13 @@ suite("CommitToBranch Tests", () => {
 
         pickBranch("main");
         const warning = captureMessage("showWarningMessage");
+        const asked = watchForPrompt();
 
         await commitToBranch(resource("readme.md"));
 
         assert.ok(warning().startsWith("readme.md differs between main and fix/1"), `Unexpected message: ${warning()}`);
         assert.deepStrictEqual(subjects("main"), ["main edits the readme", "baseline"], "main should not move");
-        assert.strictEqual(findCommitEditor(), undefined, "Should refuse before asking for a message");
+        assert.strictEqual(asked(), false, "Should refuse before asking for a message");
     });
 
     test("should not offer branches that are checked out", async () => {
@@ -238,11 +251,50 @@ suite("CommitToBranch Tests", () => {
         write(repo, "readme.md", "hello world\n");
 
         pickBranch(undefined);
+        const asked = watchForPrompt();
 
         await commitToBranch(resource("readme.md"));
 
         assert.deepStrictEqual(subjects("main"), ["baseline"]);
-        assert.strictEqual(findCommitEditor(), undefined, "Should not ask for a message");
+        assert.strictEqual(asked(), false, "Should not ask for a message");
+    });
+
+    test("should name the target branch in the prompt", async () => {
+        seedDivergedBranch();
+        write(repo, "readme.md", "hello world\n");
+
+        pickBranch("main");
+
+        let title: string | undefined;
+        stubInputBox(input => {
+            title = input.title;
+            input.cancel();
+        });
+
+        await commitToBranch(resource("readme.md"));
+
+        assert.strictEqual(title, "Commit 1 file to main");
+    });
+
+    test("should commit a title and a body through the editor", async () => {
+        seedDivergedBranch();
+        write(repo, "readme.md", "hello world\n");
+
+        pickBranch("main");
+        captureMessage("showInformationMessage");
+        stubInputBox(input => input.click(EDITOR_BUTTON_TOOLTIP));
+
+        const running = commitToBranch(resource("readme.md"));
+        const editor = await waitForCommitEditor();
+
+        await editor.edit(builder =>
+            builder.replace(new vscode.Range(0, 0, 0, editor.document.lineAt(0).text.length), "docs: update readme\n\nwith a body")
+        );
+        await acceptCommitMessage();
+        await running;
+
+        assert.deepStrictEqual(subjects("main"), ["docs: update readme", "baseline"]);
+        assert.strictEqual(fileAt("main", "readme.md"), "hello world\n");
     });
 
     test("should not commit when the message editor is closed", async () => {
@@ -250,6 +302,7 @@ suite("CommitToBranch Tests", () => {
         write(repo, "readme.md", "hello world\n");
 
         pickBranch("main");
+        stubInputBox(input => input.click(EDITOR_BUTTON_TOOLTIP));
 
         const running = commitToBranch(resource("readme.md"));
         const editor = await waitForCommitEditor();

@@ -7,6 +7,11 @@ export function run(): Promise<void> {
     const mocha = new Mocha({
         ui: "tdd",
         color: true,
+        // These drive a real VS Code window: opening an editor and running git take the best part of
+        // a second each, and the first test of a run also waits for the extension to activate.
+        timeout: 15000,
+        // A whole run takes about a minute, so MOCHA_GREP narrows it to one suite while working.
+        grep: process.env.MOCHA_GREP,
     });
 
     const testsRoot = path.resolve(__dirname, "..");

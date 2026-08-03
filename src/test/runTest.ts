@@ -5,7 +5,9 @@ async function main() {
     try {
         // The folder containing the Extension Manifest package.json
         // Passed to `--extensionDevelopmentPath`
-        const extensionDevelopmentPath = path.resolve(__dirname, "../../");
+        // This file runs from out/test/test, so the repository root is three levels up. Pointing at
+        // anything else leaves the extension unloaded, and every contributed command missing.
+        const extensionDevelopmentPath = path.resolve(__dirname, "../../../");
 
         // The path to test runner
         // Passed to --extensionTestsPath

@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 
-import { promptForCommitMessage } from "./commitMessageEditor";
+import { promptForCommitMessage } from "./commitMessageInput";
 import { execGit, execGitRaw, findGitDir, toGitPath } from "./gitCli";
 import { resolveSelectedFiles } from "./selectedFiles";
 

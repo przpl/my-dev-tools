@@ -1,0 +1,11 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "scopeName": "text.my-dev-tools-commit",
+    "name": "My Dev Tools Commit Message",
+    "patterns": [
+        {
+            "comment": "The commit message editor is a git commit message in everything but name, so it borrows the grammar the built-in git-base extension registers. Without that extension the text is simply unhighlighted.",
+            "include": "text.git-commit"
+        }
+    ]
+}

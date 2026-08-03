@@ -6,7 +6,9 @@ import * as path from "path";
 import * as vscode from "vscode";
 
 import { COMMIT_EDITOR_FILE_NAME, acceptCommitMessage, generateCommitMessageInEditor } from "../../../features/git/commitMessageEditor";
+import { EDITOR_BUTTON_TOOLTIP, GENERATE_BUTTON_TOOLTIP } from "../../../features/git/commitMessageInput";
 import { quickCommit } from "../../../features/git/quickCommit";
+import { FakeInputBox, restoreInputBox, stubInputBox } from "./fakeInputBox";
 
 function git(cwd: string, args: string[]): string {
     return cp.execFileSync("git", args, { cwd, stdio: "pipe", encoding: "utf8" });
@@ -57,6 +59,7 @@ suite("QuickCommit Tests", () => {
         vscode.window.showInputBox = originalShowInputBox;
         vscode.window.showInformationMessage = originalShowInformationMessage;
         vscode.window.showWarningMessage = originalShowWarningMessage;
+        restoreInputBox();
 
         await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
@@ -131,20 +134,24 @@ suite("QuickCommit Tests", () => {
     }
 
     /**
-     * Runs Quick Commit and answers its editor. `message === undefined` closes the editor instead,
-     * which is how the editor cancels.
+     * Runs Quick Commit and answers its input box. `message === undefined` dismisses it instead,
+     * which is how the prompt cancels.
      */
     async function runQuickCommit(message: string | undefined, ...resources: vscode.SourceControlResourceState[]): Promise<void> {
+        stubInputBox(input => (message === undefined ? input.cancel() : input.accept(message)));
+
+        await quickCommit(...resources);
+    }
+
+    /** The same, the long way round: the input box hands over to the editor, which answers instead. */
+    async function runQuickCommitInEditor(message: string, ...resources: vscode.SourceControlResourceState[]): Promise<void> {
+        stubInputBox(input => input.click(EDITOR_BUTTON_TOOLTIP));
+
         const running = quickCommit(...resources);
         const editor = await waitForCommitEditor();
 
-        if (message === undefined) {
-            await closeCommitEditor(editor);
-        } else {
-            await typeCommitMessage(editor, message);
-            await acceptCommitMessage();
-        }
-
+        await typeCommitMessage(editor, message);
+        await acceptCommitMessage();
         await running;
     }
 
@@ -277,6 +284,49 @@ suite("QuickCommit Tests", () => {
         assert.strictEqual(git(repo, ["show", "--pretty=", "--name-only", "HEAD"]).trim(), "a file with spaces.ts");
     });
 
+    suite("commit message input box", () => {
+        test("should refuse an empty message and stay open", async () => {
+            write(repo, "file.ts", "const a = 1;\n");
+            commitAll();
+            write(repo, "file.ts", "const a = 2;\n");
+
+            let box: FakeInputBox | undefined;
+            stubInputBox(input => {
+                box = input;
+                input.accept("   ");
+                input.cancel();
+            });
+
+            await quickCommit(resource("file.ts"));
+
+            assert.strictEqual(box?.validationMessage, "Commit message cannot be empty.");
+            assert.deepStrictEqual(subjects(), ["baseline"], "Nothing should be committed");
+        });
+
+        test("should carry what was typed over to the editor", async () => {
+            // The button is there for a message that outgrows one line, so what is already written
+            // has to survive the trip - retyping it is the reason nobody would press the button.
+            write(repo, "file.ts", "const a = 1;\n");
+            captureInformationMessage();
+
+            stubInputBox(input => {
+                input.type("feat: start in the box");
+                input.click(EDITOR_BUTTON_TOOLTIP);
+            });
+
+            const running = quickCommit(resource("file.ts"));
+            const editor = await waitForCommitEditor();
+
+            assert.ok(editor.document.getText().startsWith("feat: start in the box\n"), editor.document.getText());
+
+            await editor.edit(builder => builder.insert(new vscode.Position(1, 0), "\nand finish in the editor\n"));
+            await acceptCommitMessage();
+            await running;
+
+            assert.strictEqual(lastCommitMessage(), "feat: start in the box\n\nand finish in the editor");
+        });
+    });
+
     suite("commit message editor", () => {
         test("should commit a title and a body", async () => {
             write(repo, "file.ts", "const a = 1;\n");
@@ -284,7 +334,7 @@ suite("QuickCommit Tests", () => {
 
             const message = "feat(git): commit from an editor\n\n- an input box holds one line, a body needs more\n- the editor strips its own comments";
 
-            await runQuickCommit(message, resource("file.ts"));
+            await runQuickCommitInEditor(message, resource("file.ts"));
 
             assert.strictEqual(lastCommitMessage(), message);
         });
@@ -292,6 +342,8 @@ suite("QuickCommit Tests", () => {
         test("should keep the comment block out of the commit message", async () => {
             write(repo, "file.ts", "const a = 1;\n");
             captureInformationMessage();
+
+            stubInputBox(input => input.click(EDITOR_BUTTON_TOOLTIP));
 
             const running = quickCommit(resource("file.ts"));
             const editor = await waitForCommitEditor();
@@ -306,9 +358,11 @@ suite("QuickCommit Tests", () => {
             assert.strictEqual(lastCommitMessage(), "docs: describe the change");
         });
 
-        test("should open with the git-commit language mode", async () => {
+        test("should open with this extension's own commit language mode", async () => {
             write(repo, "file.ts", "const a = 1;\n");
             captureInformationMessage();
+
+            stubInputBox(input => input.click(EDITOR_BUTTON_TOOLTIP));
 
             const running = quickCommit(resource("file.ts"));
             const editor = await waitForCommitEditor();
@@ -318,7 +372,9 @@ suite("QuickCommit Tests", () => {
             await acceptCommitMessage();
             await running;
 
-            assert.strictEqual(languageId, "git-commit");
+            // `git-commit` would bring the built-in Git extension's own accept button along with
+            // it, and that one discards the message instead of committing it.
+            assert.strictEqual(languageId, "myDevToolsCommit");
         });
 
         test("should refuse an empty commit message and stay open", async () => {
@@ -328,13 +384,15 @@ suite("QuickCommit Tests", () => {
 
             const warning = captureWarningMessage();
 
+            stubInputBox(input => input.click(EDITOR_BUTTON_TOOLTIP));
+
             const running = quickCommit(resource("file.ts"));
             const editor = await waitForCommitEditor();
 
             await typeCommitMessage(editor, "   ");
             await acceptCommitMessage();
 
-            assert.strictEqual(warning(), "Commit message cannot be empty.");
+            assert.ok(warning().startsWith("Commit message cannot be empty."), `Unexpected message: ${warning()}`);
             assert.ok(findCommitEditor(), "The editor should still be open");
 
             await closeCommitEditor(editor);
@@ -343,11 +401,21 @@ suite("QuickCommit Tests", () => {
             assert.deepStrictEqual(subjects(), ["baseline"], "Nothing should be committed");
         });
 
+        test("should say so when accepting without a prompt waiting for an answer", async () => {
+            // A window reload restores the tab but not the session behind it, and the check mark is
+            // contributed by file name alone. Doing nothing there is indistinguishable from a bug.
+            const warning = captureWarningMessage();
+
+            await acceptCommitMessage();
+
+            assert.ok(warning().includes("no longer active"), `Unexpected message: ${warning()}`);
+        });
+
         test("should remove the scratch file once the prompt is answered", async () => {
             write(repo, "file.ts", "const a = 1;\n");
             captureInformationMessage();
 
-            await runQuickCommit("chore: leave nothing behind", resource("file.ts"));
+            await runQuickCommitInEditor("chore: leave nothing behind", resource("file.ts"));
             await waitForCommitEditorToClose();
 
             assert.strictEqual(fs.existsSync(commitEditorPath()), false);
@@ -355,11 +423,34 @@ suite("QuickCommit Tests", () => {
     });
 
     suite("generate button", () => {
+        test("should say there is nothing to describe rather than call the model from the input box", async () => {
+            write(repo, "file.ts", "const a = 1;\n");
+            commitAll();
+
+            const infoMessage = captureInformationMessage();
+
+            stubInputBox(async input => {
+                input.click(GENERATE_BUTTON_TOOLTIP);
+                // The generate button runs on its own, so the box is still open behind it.
+                for (let attempt = 0; attempt < 100 && infoMessage() === ""; attempt++) {
+                    await delay(50);
+                }
+                input.cancel();
+            });
+
+            await quickCommit(resource("file.ts"));
+
+            assert.strictEqual(infoMessage(), "There are no changes to describe.");
+            assert.deepStrictEqual(subjects(), ["baseline"]);
+        });
+
         test("should say there is nothing to describe rather than call the model", async () => {
             write(repo, "file.ts", "const a = 1;\n");
             commitAll();
 
             const infoMessage = captureInformationMessage();
+
+            stubInputBox(input => input.click(EDITOR_BUTTON_TOOLTIP));
 
             const running = quickCommit(resource("file.ts"));
             const editor = await waitForCommitEditor();
@@ -382,6 +473,8 @@ suite("QuickCommit Tests", () => {
             // Cancelling the API key prompt is the cheapest way to make generation fail offline.
             vscode.window.showInputBox = async () => undefined;
             const errorMessage = captureErrorMessage();
+
+            stubInputBox(input => input.click(EDITOR_BUTTON_TOOLTIP));
 
             const running = quickCommit(resource("file.ts"));
             const editor = await waitForCommitEditor();
