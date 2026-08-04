@@ -1,28 +1,22 @@
 import * as assert from "assert";
-import * as cp from "child_process";
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 
-import { COMMIT_EDITOR_FILE_NAME, acceptCommitMessage, generateCommitMessageInEditor } from "../../../features/git/commitMessageEditor";
+import { acceptCommitMessage, generateCommitMessageInEditor } from "../../../features/git/commitMessageEditor";
 import { EDITOR_BUTTON_TOOLTIP, GENERATE_BUTTON_TOOLTIP } from "../../../features/git/commitMessageInput";
 import { quickCommit } from "../../../features/git/quickCommit";
+import { commitAll, createTempRepo, git, removeTempRepo, writeFile as write } from "../../helpers/tempRepo";
+import {
+    captureMessage,
+    commitEditorPath,
+    delay,
+    findCommitEditor as findCommitEditorIn,
+    restoreMessages,
+    waitForCommitEditor as waitForEditorIn,
+    waitForCommitEditorToClose as waitForEditorToCloseIn,
+} from "../../helpers/vscodeStubs";
 import { FakeInputBox, restoreInputBox, stubInputBox } from "./fakeInputBox";
-
-function git(cwd: string, args: string[]): string {
-    return cp.execFileSync("git", args, { cwd, stdio: "pipe", encoding: "utf8" });
-}
-
-function write(repo: string, relativePath: string, content: string): void {
-    const target = path.join(repo, relativePath);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, content);
-}
-
-function delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
 
 async function typeCommitMessage(editor: vscode.TextEditor, message: string): Promise<void> {
     const document = editor.document;
@@ -36,102 +30,43 @@ async function closeCommitEditor(editor: vscode.TextEditor): Promise<void> {
 
 suite("QuickCommit Tests", () => {
     let repo: string;
-    let originalShowErrorMessage: typeof vscode.window.showErrorMessage;
     let originalShowInputBox: typeof vscode.window.showInputBox;
-    let originalShowInformationMessage: typeof vscode.window.showInformationMessage;
-    let originalShowWarningMessage: typeof vscode.window.showWarningMessage;
 
     setup(() => {
-        originalShowErrorMessage = vscode.window.showErrorMessage;
         originalShowInputBox = vscode.window.showInputBox;
-        originalShowInformationMessage = vscode.window.showInformationMessage;
-        originalShowWarningMessage = vscode.window.showWarningMessage;
 
-        repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "vscode-quick-commit-")));
-
-        git(repo, ["init", "-q", "."]);
-        git(repo, ["config", "user.email", "test@example.com"]);
-        git(repo, ["config", "user.name", "Test"]);
+        repo = createTempRepo("quick-commit");
     });
 
     teardown(async () => {
-        vscode.window.showErrorMessage = originalShowErrorMessage;
+        restoreMessages();
         vscode.window.showInputBox = originalShowInputBox;
-        vscode.window.showInformationMessage = originalShowInformationMessage;
-        vscode.window.showWarningMessage = originalShowWarningMessage;
         restoreInputBox();
 
         await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
-        try {
-            fs.rmSync(repo, { recursive: true, force: true });
-        } catch {
-            // Windows can hold locks on the git directory; leaving the temp folder behind is harmless.
-        }
+        removeTempRepo(repo);
     });
 
     function resource(relativePath: string): vscode.SourceControlResourceState {
         return { resourceUri: vscode.Uri.file(path.join(repo, relativePath)) };
     }
 
-    function commitEditorPath(): string {
-        return path.join(repo, ".git", COMMIT_EDITOR_FILE_NAME);
-    }
-
-    /**
-     * This repository's editor specifically. A previous test's editor can still be visible when the
-     * next one starts, and matching it by name alone made the tests act on a finished session.
-     */
     function findCommitEditor(): vscode.TextEditor | undefined {
-        const expected = vscode.Uri.file(commitEditorPath()).toString();
-        return vscode.window.visibleTextEditors.find(editor => editor.document.uri.toString() === expected);
+        return findCommitEditorIn(repo);
     }
 
-    /** The prompt opens a real editor, so the tests wait for it rather than stubbing an input box. */
-    async function waitForCommitEditor(): Promise<vscode.TextEditor> {
-        for (let attempt = 0; attempt < 100; attempt++) {
-            const editor = findCommitEditor();
-            if (editor) {
-                return editor;
-            }
-            await delay(50);
-        }
-
-        throw new Error("The commit message editor never opened");
+    function waitForCommitEditor(): Promise<vscode.TextEditor> {
+        return waitForEditorIn(repo);
     }
 
-    async function waitForCommitEditorToClose(): Promise<void> {
-        for (let attempt = 0; attempt < 100 && findCommitEditor(); attempt++) {
-            await delay(50);
-        }
+    function waitForCommitEditorToClose(): Promise<void> {
+        return waitForEditorToCloseIn(repo);
     }
 
-    function captureErrorMessage(): () => string {
-        let message = "";
-        vscode.window.showErrorMessage = async (value: string) => {
-            message = value;
-            return undefined;
-        };
-        return () => message;
-    }
-
-    function captureInformationMessage(): () => string {
-        let message = "";
-        vscode.window.showInformationMessage = async (value: string) => {
-            message = value;
-            return undefined;
-        };
-        return () => message;
-    }
-
-    function captureWarningMessage(): () => string {
-        let message = "";
-        vscode.window.showWarningMessage = async (value: string) => {
-            message = value;
-            return undefined;
-        };
-        return () => message;
-    }
+    const captureErrorMessage = () => captureMessage("error");
+    const captureInformationMessage = () => captureMessage("information");
+    const captureWarningMessage = () => captureMessage("warning");
 
     /**
      * Runs Quick Commit and answers its input box. `message === undefined` dismisses it instead,
@@ -153,11 +88,6 @@ suite("QuickCommit Tests", () => {
         await typeCommitMessage(editor, message);
         await acceptCommitMessage();
         await running;
-    }
-
-    function commitAll(): void {
-        git(repo, ["add", "-A"]);
-        git(repo, ["commit", "-qm", "baseline"]);
     }
 
     /** Subject lines of every commit, newest first. */
@@ -188,7 +118,7 @@ suite("QuickCommit Tests", () => {
     test("should commit multiple files", async () => {
         write(repo, "file1.ts", "const a = 1;\n");
         write(repo, "file2.ts", "const b = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "file1.ts", "const a = 2;\n");
         write(repo, "file2.ts", "const b = 2;\n");
@@ -203,7 +133,7 @@ suite("QuickCommit Tests", () => {
 
     test("should commit an untracked file", async () => {
         write(repo, "seed.ts", "const seed = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "brand-new.ts", "const isNew = true;\n");
 
@@ -217,7 +147,7 @@ suite("QuickCommit Tests", () => {
     test("should leave unrelated staged files in the index", async () => {
         write(repo, "already-staged.ts", "const staged = 1;\n");
         write(repo, "selected.ts", "const selected = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "already-staged.ts", "const staged = 2;\n");
         git(repo, ["add", "already-staged.ts"]);
@@ -235,9 +165,28 @@ suite("QuickCommit Tests", () => {
         assert.deepStrictEqual(stagedPaths(), ["already-staged.ts"], "The other file should stay staged");
     });
 
+    test("should commit the working tree version of a partially staged file", async () => {
+        // `git commit -- <paths>` commits what is on disk, bypassing the index for those paths: a
+        // file staged hunk by hunk has its unstaged remainder committed along with it. Surprising,
+        // but it is the contract, and the alternative would commit a version nobody selected.
+        write(repo, "file.ts", "const a = 1;\nconst b = 1;\n");
+        commitAll(repo);
+
+        write(repo, "file.ts", "const a = 2;\nconst b = 1;\n");
+        git(repo, ["add", "file.ts"]);
+        write(repo, "file.ts", "const a = 2;\nconst b = 2;\n");
+
+        captureInformationMessage();
+
+        await runQuickCommit("Commit the whole file", resource("file.ts"));
+
+        assert.strictEqual(git(repo, ["show", "HEAD:file.ts"]), "const a = 2;\nconst b = 2;\n");
+        assert.strictEqual(git(repo, ["status", "--porcelain"]), "", "Nothing should be left behind");
+    });
+
     test("should show error when the commit fails", async () => {
         write(repo, "seed.ts", "const seed = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         const errorMessage = captureErrorMessage();
 
@@ -250,7 +199,7 @@ suite("QuickCommit Tests", () => {
 
     test("should not commit when user cancels", async () => {
         write(repo, "file.ts", "const a = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "file.ts", "const a = 2;\n");
 
@@ -287,7 +236,7 @@ suite("QuickCommit Tests", () => {
     suite("commit message input box", () => {
         test("should refuse an empty message and stay open", async () => {
             write(repo, "file.ts", "const a = 1;\n");
-            commitAll();
+            commitAll(repo);
             write(repo, "file.ts", "const a = 2;\n");
 
             let box: FakeInputBox | undefined;
@@ -379,7 +328,7 @@ suite("QuickCommit Tests", () => {
 
         test("should refuse an empty commit message and stay open", async () => {
             write(repo, "file.ts", "const a = 1;\n");
-            commitAll();
+            commitAll(repo);
             write(repo, "file.ts", "const a = 2;\n");
 
             const warning = captureWarningMessage();
@@ -418,14 +367,14 @@ suite("QuickCommit Tests", () => {
             await runQuickCommitInEditor("chore: leave nothing behind", resource("file.ts"));
             await waitForCommitEditorToClose();
 
-            assert.strictEqual(fs.existsSync(commitEditorPath()), false);
+            assert.strictEqual(fs.existsSync(commitEditorPath(repo)), false);
         });
     });
 
     suite("generate button", () => {
         test("should say there is nothing to describe rather than call the model from the input box", async () => {
             write(repo, "file.ts", "const a = 1;\n");
-            commitAll();
+            commitAll(repo);
 
             const infoMessage = captureInformationMessage();
 
@@ -446,7 +395,7 @@ suite("QuickCommit Tests", () => {
 
         test("should say there is nothing to describe rather than call the model", async () => {
             write(repo, "file.ts", "const a = 1;\n");
-            commitAll();
+            commitAll(repo);
 
             const infoMessage = captureInformationMessage();
 
@@ -467,7 +416,7 @@ suite("QuickCommit Tests", () => {
 
         test("should report a generation failure without committing", async () => {
             write(repo, "file.ts", "const a = 1;\n");
-            commitAll();
+            commitAll(repo);
             write(repo, "file.ts", "const a = 2;\n");
 
             // Cancelling the API key prompt is the cheapest way to make generation fail offline.
@@ -491,9 +440,8 @@ suite("QuickCommit Tests", () => {
     });
 
     test("should show error when files come from different repositories", async () => {
-        const otherRepo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "vscode-quick-commit-other-")));
-        git(otherRepo, ["init", "-q", "."]);
-        fs.writeFileSync(path.join(otherRepo, "outside.ts"), "const outside = 1;\n");
+        const otherRepo = createTempRepo("quick-commit-other");
+        write(otherRepo, "outside.ts", "const outside = 1;\n");
 
         write(repo, "inside.ts", "const inside = 1;\n");
 
@@ -507,11 +455,7 @@ suite("QuickCommit Tests", () => {
             assert.strictEqual(errorMessage(), "Selected files must be from the same repository.");
             assert.strictEqual(git(repo, ["status", "--porcelain"]).includes("?? inside.ts"), true, "Nothing staged");
         } finally {
-            try {
-                fs.rmSync(otherRepo, { recursive: true, force: true });
-            } catch {
-                // See teardown.
-            }
+            removeTempRepo(otherRepo);
         }
     });
 });

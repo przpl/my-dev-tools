@@ -171,10 +171,18 @@ export function getOpenRouter(): OpenRouterClient {
     return client;
 }
 
+/**
+ * Installs the shared client. Tests use it to reach the generation pipeline, which runs in the test
+ * process rather than in the activated extension and so has a client of its own to fill in.
+ */
+export function setOpenRouter(next: OpenRouterClient | undefined): void {
+    client = next;
+}
+
 /** Creates the shared client and registers the commands that manage its API key. */
 export function initOpenRouter(context: vscode.ExtensionContext): vscode.Disposable[] {
-    client = new OpenRouterClient(context.secrets);
-    const openRouter = client;
+    const openRouter = new OpenRouterClient(context.secrets);
+    setOpenRouter(openRouter);
 
     return [
         vscode.commands.registerCommand("myDevTools.setOpenRouterApiKey", async () => {

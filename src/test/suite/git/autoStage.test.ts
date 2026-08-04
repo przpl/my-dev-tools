@@ -1,51 +1,25 @@
 import * as assert from "assert";
-import * as cp from "child_process";
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 
 import { findAutoStageableFiles } from "../../../features/git/autoStage";
-
-function git(cwd: string, args: string[]): void {
-    cp.execFileSync("git", args, { cwd, stdio: "pipe" });
-}
-
-function write(repo: string, relativePath: string, content: string): void {
-    const target = path.join(repo, relativePath);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, content);
-}
+import { commitAll, createTempRepo, git, removeTempRepo, writeFile as write } from "../../helpers/tempRepo";
 
 suite("AutoStage Tests", () => {
     let repo: string;
 
     setup(() => {
-        repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "vscode-ws-stage-")));
-
-        git(repo, ["init", "-q", "."]);
-        git(repo, ["config", "user.email", "test@example.com"]);
-        git(repo, ["config", "user.name", "Test"]);
-        // Keep the fixtures byte-exact so trailing-whitespace cases are not rewritten on checkout.
-        git(repo, ["config", "core.autocrlf", "false"]);
+        repo = createTempRepo("ws-stage");
     });
 
     teardown(() => {
-        try {
-            fs.rmSync(repo, { recursive: true, force: true });
-        } catch {
-            // Windows can hold locks on the git directory; leaving the temp folder behind is harmless.
-        }
+        removeTempRepo(repo);
     });
-
-    function commitAll(): void {
-        git(repo, ["add", "-A"]);
-        git(repo, ["commit", "-qm", "baseline"]);
-    }
 
     /** Commits `before`, writes `after` over it and returns the files auto stage would pick up. */
     async function classify(file: string, before: string, after: string): Promise<string[]> {
         write(repo, file, before);
-        commitAll();
+        commitAll(repo);
         write(repo, file, after);
 
         return findAutoStageableFiles(repo);
@@ -82,7 +56,7 @@ suite("AutoStage Tests", () => {
 
         test("ignores unchanged files", async () => {
             write(repo, "stable.ts", "const a = 1;\n");
-            commitAll();
+            commitAll(repo);
 
             assert.deepStrictEqual(await findAutoStageableFiles(repo), []);
         });
@@ -91,7 +65,7 @@ suite("AutoStage Tests", () => {
             write(repo, "kept.ts", "const kept = 1;\n");
             write(repo, "removed.ts", "const removed = 1;\n");
             write(repo, "blank-only.ts", "\n\n\n");
-            commitAll();
+            commitAll(repo);
 
             write(repo, "untracked.ts", "const untracked = 1;\n");
             fs.unlinkSync(path.join(repo, "removed.ts"));
@@ -106,15 +80,15 @@ suite("AutoStage Tests", () => {
 
             write(repo, "conflict.ts", "const a = 1;\n");
             write(repo, "cosmetic.ts", "const b = 1;\n");
-            commitAll();
+            commitAll(repo);
 
             git(repo, ["checkout", "-qb", "other"]);
             write(repo, "conflict.ts", "const a = 2;\n");
-            commitAll();
+            commitAll(repo);
 
             git(repo, ["checkout", "-q", "-"]);
             write(repo, "conflict.ts", "const a = 3;\n");
-            commitAll();
+            commitAll(repo);
 
             try {
                 git(repo, ["merge", "other"]);
@@ -138,7 +112,7 @@ suite("AutoStage Tests", () => {
             write(repo, "wrapped.ts", "const c = veryLongFunctionName(firstArgument, secondArgument);\n");
             write(repo, "content.ts", "const b = 1;\n");
             write(repo, "untouched.ts", "const d = 1;\n");
-            commitAll();
+            commitAll(repo);
 
             write(repo, "whitespace.ts", "const a = 1;   \n");
             write(repo, "wrapped.ts", "const c = veryLongFunctionName(\n    firstArgument,\n    secondArgument,\n);\n");
@@ -149,7 +123,7 @@ suite("AutoStage Tests", () => {
 
         test("still detects a file whose changes are already partially staged", async () => {
             write(repo, "partial.ts", "const a = 1;\nconst b = 2;\n");
-            commitAll();
+            commitAll(repo);
 
             write(repo, "partial.ts", "const a = 99;\nconst b = 2;\n");
             git(repo, ["add", "partial.ts"]);

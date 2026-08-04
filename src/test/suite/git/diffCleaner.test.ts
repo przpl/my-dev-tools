@@ -312,6 +312,15 @@ suite("DiffCleaner Tests", () => {
             assert.ok(/@@ \.\.\. \d+ more changed lines omitted/.test(cleaned), cleaned.slice(-300));
         });
 
+        test("should overrun the budget rather than starve a file of its share", () => {
+            // The per-file allowance has a floor of 200 characters, so enough files legitimately push
+            // the result past `maxCharacters`. Pinned: the alternative is files with nothing under them.
+            const cleaned = clean(bigDiff(20, 60), { maxCharacters: 500 });
+
+            assert.ok(cleaned.length > 500, `Expected the floor to win, got ${cleaned.length}`);
+            assert.ok(cleaned.split("\n").filter(line => line.startsWith("+const added0 = 0;")).length === 20, cleaned.slice(0, 300));
+        });
+
         test("should still name every file when truncating", () => {
             const cleaned = clean(bigDiff(4, 60), { maxCharacters: 1500 });
 
@@ -462,6 +471,15 @@ suite("DiffCleaner Tests", () => {
             assert.ok(cleaned.includes(" const short = 1;"), "A short line is untouched");
             assert.ok(cleaned.includes("…"));
             assert.ok(cleaned.split("\n").every(line => line.length <= 42));
+        });
+
+        test("should measure the cap on the payload rather than on the line", () => {
+            // The `+`/`-` sign is not part of what the cap is paying for, so a payload of exactly
+            // `maxLineLength` survives whole and one character more is the first to be cut.
+            const raw = (payload: string) => ["diff --git a/a.ts b/a.ts", "--- a/a.ts", "+++ b/a.ts", "@@ -1 +1 @@", `+${payload}`].join("\n");
+
+            assert.ok(clean(raw("x".repeat(40)), { maxLineLength: 40 }).endsWith(`+${"x".repeat(40)}`), "The payload at the cap is untouched");
+            assert.ok(clean(raw("x".repeat(41)), { maxLineLength: 40 }).endsWith(`+${"x".repeat(40)}…`), "One character more is truncated");
         });
 
         test("should leave every line alone when the cap is disabled", () => {

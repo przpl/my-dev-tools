@@ -1,93 +1,41 @@
 import * as assert from "assert";
-import * as cp from "child_process";
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 
 import { commitToBranch } from "../../../features/git/commitToBranch";
-import { COMMIT_EDITOR_FILE_NAME, acceptCommitMessage } from "../../../features/git/commitMessageEditor";
+import { acceptCommitMessage } from "../../../features/git/commitMessageEditor";
 import { EDITOR_BUTTON_TOOLTIP } from "../../../features/git/commitMessageInput";
+import { createTempRepo, git, removeTempRepo, writeFile as write } from "../../helpers/tempRepo";
+import { captureMessage, restoreMessages, waitForCommitEditor as waitForEditorIn } from "../../helpers/vscodeStubs";
 import { restoreInputBox, stubInputBox } from "./fakeInputBox";
-
-function git(cwd: string, args: string[]): string {
-    return cp.execFileSync("git", args, { cwd, stdio: "pipe", encoding: "utf8" });
-}
-
-function write(repo: string, relativePath: string, content: string): void {
-    const target = path.join(repo, relativePath);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, content);
-}
-
-function delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
 
 suite("CommitToBranch Tests", () => {
     let repo: string;
-    let originalShowErrorMessage: typeof vscode.window.showErrorMessage;
-    let originalShowInformationMessage: typeof vscode.window.showInformationMessage;
-    let originalShowWarningMessage: typeof vscode.window.showWarningMessage;
     let originalShowQuickPick: typeof vscode.window.showQuickPick;
 
     setup(() => {
-        originalShowErrorMessage = vscode.window.showErrorMessage;
-        originalShowInformationMessage = vscode.window.showInformationMessage;
-        originalShowWarningMessage = vscode.window.showWarningMessage;
         originalShowQuickPick = vscode.window.showQuickPick;
 
-        repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "vscode-commit-to-branch-")));
-
-        git(repo, ["init", "-q", "-b", "main", "."]);
-        git(repo, ["config", "user.email", "test@example.com"]);
-        git(repo, ["config", "user.name", "Test"]);
+        repo = createTempRepo("commit-to-branch", { branch: "main" });
     });
 
     teardown(async () => {
-        vscode.window.showErrorMessage = originalShowErrorMessage;
-        vscode.window.showInformationMessage = originalShowInformationMessage;
-        vscode.window.showWarningMessage = originalShowWarningMessage;
+        restoreMessages();
         vscode.window.showQuickPick = originalShowQuickPick;
         restoreInputBox();
 
         await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
-        try {
-            fs.rmSync(repo, { recursive: true, force: true });
-        } catch {
-            // Windows can hold locks on the git directory; leaving the temp folder behind is harmless.
-        }
+        removeTempRepo(repo);
     });
 
     function resource(relativePath: string): vscode.SourceControlResourceState {
         return { resourceUri: vscode.Uri.file(path.join(repo, relativePath)) };
     }
 
-    function findCommitEditor(): vscode.TextEditor | undefined {
-        const expected = vscode.Uri.file(path.join(repo, ".git", COMMIT_EDITOR_FILE_NAME)).toString();
-        return vscode.window.visibleTextEditors.find(editor => editor.document.uri.toString() === expected);
-    }
-
-    async function waitForCommitEditor(): Promise<vscode.TextEditor> {
-        for (let attempt = 0; attempt < 100; attempt++) {
-            const editor = findCommitEditor();
-            if (editor) {
-                return editor;
-            }
-            await delay(50);
-        }
-
-        throw new Error("The commit message editor never opened");
-    }
-
-    function captureMessage(channel: "showErrorMessage" | "showInformationMessage" | "showWarningMessage"): () => string {
-        let message = "";
-        vscode.window[channel] = (async (value: string) => {
-            message = value;
-            return undefined;
-        }) as never;
-        return () => message;
+    function waitForCommitEditor(): Promise<vscode.TextEditor> {
+        return waitForEditorIn(repo);
     }
 
     /** Answers the branch picker with `branchName`, or cancels it when `undefined`. */
@@ -164,7 +112,7 @@ suite("CommitToBranch Tests", () => {
         const headBefore = git(repo, ["rev-parse", "HEAD"]);
 
         pickBranch("main");
-        const info = captureMessage("showInformationMessage");
+        const info = captureMessage("information");
 
         await runWithMessage("docs: update readme", resource("readme.md"));
 
@@ -188,7 +136,7 @@ suite("CommitToBranch Tests", () => {
         write(repo, "readme.md", "hello world\n");
 
         pickBranch("main");
-        const warning = captureMessage("showWarningMessage");
+        const warning = captureMessage("warning");
         const asked = watchForPrompt();
 
         await commitToBranch(resource("readme.md"));
@@ -223,7 +171,7 @@ suite("CommitToBranch Tests", () => {
         write(repo, "added.ts", "const added = 1;\n");
 
         pickBranch("main");
-        captureMessage("showInformationMessage");
+        captureMessage("information");
 
         await runWithMessage("chore: shuffle files", resource("readme.md"), resource("added.ts"));
 
@@ -238,7 +186,7 @@ suite("CommitToBranch Tests", () => {
         seedDivergedBranch();
 
         pickBranch("main");
-        const info = captureMessage("showInformationMessage");
+        const info = captureMessage("information");
 
         await runWithMessage("docs: no-op", resource("readme.md")); // readme.md is unchanged on disk
 
@@ -281,7 +229,7 @@ suite("CommitToBranch Tests", () => {
         write(repo, "readme.md", "hello world\n");
 
         pickBranch("main");
-        captureMessage("showInformationMessage");
+        captureMessage("information");
         stubInputBox(input => input.click(EDITOR_BUTTON_TOOLTIP));
 
         const running = commitToBranch(resource("readme.md"));
@@ -321,7 +269,7 @@ suite("CommitToBranch Tests", () => {
         write(repo, "readme.md", "hello world\n");
 
         pickBranch("main");
-        captureMessage("showInformationMessage");
+        captureMessage("information");
 
         await runWithMessage("docs: update readme", resource("readme.md"));
 
@@ -330,7 +278,7 @@ suite("CommitToBranch Tests", () => {
     });
 
     test("should show error when no files are selected", async () => {
-        const errorMessage = captureMessage("showErrorMessage");
+        const errorMessage = captureMessage("error");
 
         await commitToBranch();
 

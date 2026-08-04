@@ -2,22 +2,7 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 
 import { OpenRouterClient, OpenRouterError } from "../../../services/openRouter";
-
-/** A SecretStorage backed by a Map, so nothing touches the real keychain. */
-function fakeSecrets(initial?: string): vscode.SecretStorage {
-    const store = new Map<string, string>();
-    if (initial !== undefined) {
-        store.set("myDevTools.openRouter.apiKey", initial);
-    }
-
-    return {
-        keys: async () => [...store.keys()],
-        get: async key => store.get(key),
-        store: async (key, value) => void store.set(key, value),
-        delete: async key => void store.delete(key),
-        onDidChange: new vscode.EventEmitter<vscode.SecretStorageChangeEvent>().event,
-    };
-}
+import { fakeSecrets } from "../../helpers/vscodeStubs";
 
 function jsonResponse(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });

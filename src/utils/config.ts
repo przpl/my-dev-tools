@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 type NamingStrategy = "camelCase" | "PascalCase" | "snake_case" | "kebab-case";
 
 /** Paths whose diff is never worth a token: machine-generated, minified or build output. */
-const DEFAULT_COMMIT_MESSAGE_EXCLUDES = [
+export const DEFAULT_COMMIT_MESSAGE_EXCLUDES = [
     "**/package-lock.json",
     "**/npm-shrinkwrap.json",
     "**/pnpm-lock.yaml",

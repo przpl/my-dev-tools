@@ -8,8 +8,11 @@ suite("FileExclusionManager Tests", () => {
     let mockContext: vscode.ExtensionContext;
     let mockConfig: MockConfig;
     let configUpdateCalls: Array<{ key: string; value: any; target: vscode.ConfigurationTarget }>;
+    let originalGetConfiguration: typeof vscode.workspace.getConfiguration;
 
     setup(() => {
+        originalGetConfiguration = vscode.workspace.getConfiguration;
+
         // Reset state
         configUpdateCalls = [];
 
@@ -52,6 +55,12 @@ suite("FileExclusionManager Tests", () => {
                 },
             } as any;
         }) as any;
+    });
+
+    teardown(() => {
+        // Every suite Mocha runs after this one reads the real settings; leaving the stub in place
+        // makes an unrelated failure look like a bug in whatever ran next.
+        vscode.workspace.getConfiguration = originalGetConfiguration;
     });
 
     test("isHidden should return false when all patterns are false", () => {
@@ -292,10 +301,13 @@ suite("Explorer File Visibility Command Tests", () => {
     let originalShowInformationMessage: any;
     let originalShowWarningMessage: any;
     let originalShowErrorMessage: any;
+    let originalGetConfiguration: typeof vscode.workspace.getConfiguration;
     let mockContext: vscode.ExtensionContext;
     let mockConfig: any;
 
     setup(() => {
+        originalGetConfiguration = vscode.workspace.getConfiguration;
+
         // Reset messages
         infoMessage = undefined;
         warningMessage = undefined;
@@ -365,6 +377,7 @@ suite("Explorer File Visibility Command Tests", () => {
         vscode.window.showInformationMessage = originalShowInformationMessage;
         vscode.window.showWarningMessage = originalShowWarningMessage;
         vscode.window.showErrorMessage = originalShowErrorMessage;
+        vscode.workspace.getConfiguration = originalGetConfiguration;
     });
 
     test("should show warning when files.exclude is empty", async () => {

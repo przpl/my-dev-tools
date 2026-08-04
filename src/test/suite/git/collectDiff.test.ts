@@ -1,49 +1,21 @@
 import * as assert from "assert";
-import * as cp from "child_process";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
 
 import { collectDiff, matchesGlob, resolveScope } from "../../../features/git/collectDiff";
 import { cleanDiff } from "../../../features/git/diffCleaner";
+import { commitAll, createTempRepo, git, removeTempRepo, writeFile as write } from "../../helpers/tempRepo";
 
 const EXCLUDES = ["**/package-lock.json", "**/*.lock", "**/dist/**"];
-
-function git(cwd: string, args: string[]): void {
-    cp.execFileSync("git", args, { cwd, stdio: "pipe" });
-}
-
-function write(repo: string, relativePath: string, content: string): void {
-    const target = path.join(repo, relativePath);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, content);
-}
 
 suite("CollectDiff Tests", () => {
     let repo: string;
 
     setup(() => {
-        repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "vscode-collect-diff-")));
-
-        git(repo, ["init", "-q", "."]);
-        git(repo, ["config", "user.email", "test@example.com"]);
-        git(repo, ["config", "user.name", "Test"]);
-        // Keep the fixtures byte-exact so reformatting cases are not rewritten on checkout.
-        git(repo, ["config", "core.autocrlf", "false"]);
+        repo = createTempRepo("collect-diff");
     });
 
     teardown(() => {
-        try {
-            fs.rmSync(repo, { recursive: true, force: true });
-        } catch {
-            // Windows can hold locks on the git directory; leaving the temp folder behind is harmless.
-        }
+        removeTempRepo(repo);
     });
-
-    function commitAll(): void {
-        git(repo, ["add", "-A"]);
-        git(repo, ["commit", "-qm", "baseline"]);
-    }
 
     async function collect() {
         return collectDiff(repo, await resolveScope(repo), EXCLUDES);
@@ -51,7 +23,7 @@ suite("CollectDiff Tests", () => {
 
     test("should describe the working tree when nothing is staged", async () => {
         write(repo, "src/app.ts", "const limit = 5;\n");
-        commitAll();
+        commitAll(repo);
         write(repo, "src/app.ts", "const limit = 50;\n");
 
         const collected = await collect();
@@ -66,7 +38,7 @@ suite("CollectDiff Tests", () => {
     test("should describe the index alone once something is staged", async () => {
         write(repo, "staged.ts", "const a = 1;\n");
         write(repo, "unstaged.ts", "const b = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "staged.ts", "const a = 2;\n");
         write(repo, "unstaged.ts", "const b = 2;\n");
@@ -83,7 +55,7 @@ suite("CollectDiff Tests", () => {
     test("should name an excluded file without diffing it", async () => {
         write(repo, "package-lock.json", '{\n    "lockfileVersion": 1\n}\n');
         write(repo, "src/app.ts", "const a = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "package-lock.json", '{\n    "lockfileVersion": 2\n}\n');
         write(repo, "src/app.ts", "const a = 2;\n");
@@ -99,7 +71,7 @@ suite("CollectDiff Tests", () => {
 
     test("should include an untracked file as an addition", async () => {
         write(repo, "seed.ts", "const seed = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "brand-new.ts", "export const isNew = true;\n");
 
@@ -114,7 +86,7 @@ suite("CollectDiff Tests", () => {
 
     test("should exclude an untracked file that matches an exclusion", async () => {
         write(repo, "seed.ts", "const seed = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "bun.lock", "generated\n");
 
@@ -126,7 +98,7 @@ suite("CollectDiff Tests", () => {
 
     test("should report a rename rather than a delete and an add", async () => {
         write(repo, "src/old.ts", "export const value = 1;\nexport const other = 2;\n");
-        commitAll();
+        commitAll(repo);
 
         git(repo, ["mv", "src/old.ts", "src/new.ts"]);
 
@@ -140,7 +112,7 @@ suite("CollectDiff Tests", () => {
     test("should flag a reformatted file as formatting only", async () => {
         write(repo, "src/style.ts", "const a = {x: 1};\n");
         write(repo, "src/real.ts", "const limit = 5;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "src/style.ts", "const a = {\n    x: 1,\n};\n");
         write(repo, "src/real.ts", "const limit = 50;\n");
@@ -175,7 +147,7 @@ suite("CollectDiff Tests", () => {
     test("should restrict the diff to the requested paths", async () => {
         write(repo, "a.ts", "const a = 1;\n");
         write(repo, "b.ts", "const b = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "a.ts", "const a = 2;\n");
         write(repo, "b.ts", "const b = 2;\n");
@@ -205,7 +177,7 @@ suite("CollectDiff Tests", () => {
     test("should describe a requested path whether or not it is staged", async () => {
         write(repo, "staged.ts", "const a = 1;\n");
         write(repo, "unstaged.ts", "const b = 1;\n");
-        commitAll();
+        commitAll(repo);
 
         write(repo, "staged.ts", "const a = 2;\n");
         write(repo, "unstaged.ts", "const b = 2;\n");

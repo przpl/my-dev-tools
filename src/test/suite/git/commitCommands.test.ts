@@ -1,12 +1,12 @@
 import * as assert from "assert";
-import * as cp from "child_process";
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 
 import { COMMIT_EDITOR_FILE_NAME } from "../../../features/git/commitMessageEditor";
 import { EDITOR_BUTTON_TOOLTIP } from "../../../features/git/commitMessageInput";
+import { createTempRepo, git, removeTempRepo, writeFile } from "../../helpers/tempRepo";
+import { captureMessage, restoreMessages, waitForCommitEditor as waitForEditorIn } from "../../helpers/vscodeStubs";
 import { restoreInputBox, stubInputBox } from "./fakeInputBox";
 
 /**
@@ -16,44 +16,26 @@ import { restoreInputBox, stubInputBox } from "./fakeInputBox";
  * VS Code actually passes.
  */
 
-function git(cwd: string, args: string[]): string {
-    return cp.execFileSync("git", args, { cwd, stdio: "pipe", encoding: "utf8" });
-}
-
-function delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 suite("Commit command wiring", () => {
     let repo: string;
-    let originalShowInformationMessage: typeof vscode.window.showInformationMessage;
 
     setup(() => {
-        originalShowInformationMessage = vscode.window.showInformationMessage;
-        vscode.window.showInformationMessage = (async () => undefined) as typeof vscode.window.showInformationMessage;
+        captureMessage("information");
 
-        repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "vscode-commit-commands-")));
-
-        git(repo, ["init", "-q", "."]);
-        git(repo, ["config", "user.email", "test@example.com"]);
-        git(repo, ["config", "user.name", "Test"]);
+        repo = createTempRepo("commit-commands");
     });
 
     teardown(async () => {
-        vscode.window.showInformationMessage = originalShowInformationMessage;
+        restoreMessages();
         restoreInputBox();
 
         await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 
-        try {
-            fs.rmSync(repo, { recursive: true, force: true });
-        } catch {
-            // Windows can hold locks on the git directory; leaving the temp folder behind is harmless.
-        }
+        removeTempRepo(repo);
     });
 
     function write(relativePath: string, content: string): void {
-        fs.writeFileSync(path.join(repo, relativePath), content);
+        writeFile(repo, relativePath, content);
     }
 
     function resource(relativePath: string): vscode.SourceControlResourceState {
@@ -64,23 +46,8 @@ suite("Commit command wiring", () => {
      * The comment block, not the tab: the file is a real file that an earlier window can leave
      * behind, so a tab with that name proves nothing about a prompt waiting behind it.
      */
-    function findCommitEditor(): vscode.TextEditor | undefined {
-        const expected = vscode.Uri.file(path.join(repo, ".git", COMMIT_EDITOR_FILE_NAME)).toString();
-        return vscode.window.visibleTextEditors.find(
-            editor => editor.document.uri.toString() === expected && editor.document.getText().includes("# Committing")
-        );
-    }
-
-    async function waitForCommitEditor(): Promise<vscode.TextEditor> {
-        for (let attempt = 0; attempt < 100; attempt++) {
-            const editor = findCommitEditor();
-            if (editor) {
-                return editor;
-            }
-            await delay(50);
-        }
-
-        throw new Error("The commit message editor never opened");
+    function waitForCommitEditor(): Promise<vscode.TextEditor> {
+        return waitForEditorIn(repo, { withComments: true });
     }
 
     /** Runs Quick Commit the way the Source Control context menu does, and accepts with the check mark. */

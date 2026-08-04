@@ -138,6 +138,7 @@
                         "**/pnpm-lock.yaml",
                         "**/yarn.lock",
                         "**/bun.lockb",
+                        "**/bun.lock",
                         "**/*.lock",
                         "**/go.sum",
                         "**/*.min.js",
