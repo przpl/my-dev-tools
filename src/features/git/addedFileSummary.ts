@@ -1,8 +1,6 @@
 import * as path from "path";
 import { ts } from "ts-morph";
 
-import { isScriptFile } from "./scriptFormatting";
-
 /**
  * Reduces a newly added file to the part a commit message can use. A new file is the one case where
  * the diff carries a whole program rather than an edit to one: every line arrives as `+`, so the
@@ -19,10 +17,6 @@ const MIN_STUBBED_BODY_LINES = 3;
 
 export function isMarkdownFile(filePath: string): boolean {
     return MARKDOWN_FILE.test(path.extname(filePath));
-}
-
-export function isSummarizableFile(filePath: string): boolean {
-    return isScriptFile(filePath) || isMarkdownFile(filePath);
 }
 
 const SCRIPT_KINDS = new Map<string, ts.ScriptKind>([
