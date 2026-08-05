@@ -3,6 +3,7 @@ import * as path from "path";
 import { isText } from "istextorbinary";
 
 import { mapWithLimit } from "../../utils/concurrency";
+import { matchesGlob } from "../../utils/globUtils";
 import { isFormattingOnlyChange, isSupportedFile } from "./formattingOnly";
 import { execGit, execGitRaw } from "./gitCli";
 
@@ -244,34 +245,3 @@ export async function collectDiff(gitRoot: string, scope: DiffScope, excludeGlob
     };
 }
 
-/**
- * Matches the subset of glob syntax the exclusion settings use, following git's `:(glob)` rules:
- * `*` stops at a slash, `?` is one non-slash character, and a leading double star followed by a
- * slash spans any number of directories *including none*, so the default `package-lock.json`
- * pattern also matches one sitting at the repository root.
- */
-export function matchesGlob(filePath: string, glob: string): boolean {
-    let pattern = "";
-
-    for (let i = 0; i < glob.length; i++) {
-        if (glob[i] !== "*" && glob[i] !== "?") {
-            pattern += escapeRegExp(glob[i]);
-        } else if (glob[i] === "?") {
-            pattern += "[^/]";
-        } else if (glob[i + 1] !== "*") {
-            pattern += "[^/]*";
-        } else if (glob[i + 2] === "/") {
-            pattern += "(?:.*/)?";
-            i += 2;
-        } else {
-            pattern += ".*";
-            i += 1;
-        }
-    }
-
-    return new RegExp(`^${pattern}$`).test(filePath);
-}
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}

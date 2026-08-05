@@ -1,7 +1,8 @@
 import * as cp from "child_process";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+
+import { createTempDir, removeTempDir, writeFile } from "./tempDir";
+
+export { writeFile };
 
 /**
  * The temporary git repository every git suite is built on. Real repositories rather than a fake
@@ -22,12 +23,11 @@ export interface TempRepoOptions {
 /**
  * A repository under the OS temp directory, named after the suite that asked for it.
  *
- * `realpathSync` because the temp directory is a symlink on macOS and git reports the resolved path,
- * and `core.autocrlf=false` because a suite that compares bytes cannot have git rewriting its line
+ * `core.autocrlf=false` because a suite that compares bytes cannot have git rewriting its line
  * endings on checkout.
  */
 export function createTempRepo(name: string, options: TempRepoOptions = {}): string {
-    const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `vscode-${name}-`)));
+    const repo = createTempDir(name);
 
     git(repo, ["init", "-q", ...(options.branch ? ["-b", options.branch] : []), "."]);
     git(repo, ["config", "user.email", "test@example.com"]);
@@ -39,18 +39,7 @@ export function createTempRepo(name: string, options: TempRepoOptions = {}): str
 
 /** Best effort: Windows holds locks on the git directory, and a leaked temp folder must never fail a test. */
 export function removeTempRepo(repo: string): void {
-    try {
-        fs.rmSync(repo, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-    } catch {
-        // Nothing to do about it, and nothing that should stop the run.
-    }
-}
-
-export function writeFile(repo: string, relativePath: string, content: string): void {
-    const target = path.join(repo, relativePath);
-
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, content);
+    removeTempDir(repo);
 }
 
 /** Commits everything in the working tree, which is how a suite gets a baseline to diff against. */

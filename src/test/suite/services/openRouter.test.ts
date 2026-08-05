@@ -66,6 +66,32 @@ suite("OpenRouter Tests", () => {
         assert.strictEqual(await client().chat(ask), "fix: trim me");
     });
 
+    test("should report what the call cost", async () => {
+        respondWith(
+            jsonResponse(200, {
+                choices: [{ message: { content: "done" } }],
+                usage: { cost: 0.00312, prompt_tokens: 3412, completion_tokens: 780 },
+            })
+        );
+
+        const result = await client().complete(ask);
+
+        assert.strictEqual(result.content, "done");
+        assert.deepStrictEqual(result.usage, { cost: 0.00312, promptTokens: 3412, completionTokens: 780 });
+    });
+
+    test("should not invent a usage a gateway did not send", async () => {
+        respondWith(jsonResponse(200, { choices: [{ message: { content: "done" } }] }));
+
+        assert.strictEqual((await client().complete(ask)).usage, undefined);
+    });
+
+    test("should drop a usage field that is not a number rather than report a false zero", async () => {
+        respondWith(jsonResponse(200, { choices: [{ message: { content: "done" } }], usage: { cost: null, prompt_tokens: 12 } }));
+
+        assert.deepStrictEqual((await client().complete(ask)).usage, { cost: undefined, promptTokens: 12, completionTokens: undefined });
+    });
+
     test("should fall back to the environment when no key is stored", async () => {
         process.env.OPENROUTER_API_KEY = "from-env";
         respondWith(jsonResponse(200, { choices: [{ message: { content: "ok" } }] }));
@@ -169,5 +195,48 @@ suite("OpenRouter Tests", () => {
         } finally {
             vscode.window.showInputBox = originalShowInputBox;
         }
+    });
+
+    test("should bill a scope to the shared key until that scope has one of its own", async () => {
+        const openRouter = client("shared-key");
+
+        assert.strictEqual(await openRouter.getApiKey("commitMessage"), "shared-key");
+        assert.strictEqual(await openRouter.hasStoredKey("commitMessage"), false);
+    });
+
+    test("should prefer the scope key over the shared one", async () => {
+        const secrets = fakeSecrets("shared-key");
+        await secrets.store("myDevTools.openRouter.apiKey.commitMessage", "commit-key");
+        const openRouter = new OpenRouterClient(secrets);
+
+        assert.strictEqual(await openRouter.getApiKey("commitMessage"), "commit-key");
+        assert.strictEqual(await openRouter.getApiKey("aiCommands"), "shared-key");
+        assert.strictEqual(await openRouter.getApiKey(), "shared-key");
+        assert.strictEqual(await openRouter.hasStoredKey("commitMessage"), true);
+    });
+
+    test("should send the scope key so the call lands under it in the activity panel", async () => {
+        const secrets = fakeSecrets("shared-key");
+        await secrets.store("myDevTools.openRouter.apiKey.aiCommands", "ai-key");
+        // A Response body reads once, so each call needs one of its own.
+        respondWith(async () => jsonResponse(200, { choices: [{ message: { content: "ok" } }] }));
+
+        const openRouter = new OpenRouterClient(secrets);
+        await openRouter.chat({ ...ask, keyScope: "aiCommands" });
+        await openRouter.chat({ ...ask, keyScope: "commitMessage" });
+
+        const sent = requests.map(request => (request.init.headers as Record<string, string>)["Authorization"]);
+        assert.deepStrictEqual(sent, ["Bearer ai-key", "Bearer shared-key"]);
+    });
+
+    test("should leave the shared key alone when a scope key is cleared", async () => {
+        const secrets = fakeSecrets("shared-key");
+        await secrets.store("myDevTools.openRouter.apiKey.commitMessage", "commit-key");
+        const openRouter = new OpenRouterClient(secrets);
+
+        await openRouter.clearApiKey("commitMessage");
+
+        assert.strictEqual(await openRouter.getApiKey(), "shared-key");
+        assert.strictEqual(await openRouter.getApiKey("commitMessage"), "shared-key");
     });
 });

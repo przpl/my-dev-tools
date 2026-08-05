@@ -157,6 +157,41 @@
                     "default": "",
                     "editPresentation": "multilineText",
                     "description": "Extra instructions appended to the commit message prompt, for project-specific conventions"
+                },
+                "myDevTools.ai.commands": {
+                    "type": "array",
+                    "default": [],
+                    "description": "AI commands available everywhere. Project-specific ones belong in the file named by 'myDevTools.ai.commandsFile', which is where completion and validation for the command format are offered; that file wins when both define the same id",
+                    "items": {
+                        "type": "object"
+                    }
+                },
+                "myDevTools.ai.commandsFile": {
+                    "type": "string",
+                    "default": ".vscode/ai-commands.json",
+                    "description": "Workspace-relative path to the JSON file holding this project's AI commands. Comments and trailing commas are allowed"
+                },
+                "myDevTools.ai.rulesDirectory": {
+                    "type": "string",
+                    "default": ".claude/rules",
+                    "description": "Workspace-relative directory of Markdown rule files. Those whose frontmatter 'paths' match the edited file are attached to AI commands that did not opt out"
+                },
+                "myDevTools.ai.model": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Model used by AI commands that do not name one of their own. Empty falls back to 'myDevTools.openRouter.model'"
+                },
+                "myDevTools.ai.maxFileCharacters": {
+                    "type": "number",
+                    "default": 120000,
+                    "minimum": 1000,
+                    "description": "An AI command refuses to run rather than send a file larger than this, so a minified or generated file cannot quietly cost a fortune"
+                },
+                "myDevTools.ai.requestTimeoutSeconds": {
+                    "type": "number",
+                    "default": 180,
+                    "minimum": 10,
+                    "description": "How long an AI command waits for the model. Whole-file rewrites and test generation need considerably longer than a commit message"
                 }
             }
         },
@@ -262,8 +297,36 @@
                 "title": "Set OpenRouter API Key"
             },
             {
+                "command": "myDevTools.setOpenRouterApiKey.shared",
+                "title": "Set OpenRouter API Key: Shared"
+            },
+            {
+                "command": "myDevTools.setOpenRouterApiKey.commitMessage",
+                "title": "Set OpenRouter API Key: Commit Messages"
+            },
+            {
+                "command": "myDevTools.setOpenRouterApiKey.aiCommands",
+                "title": "Set OpenRouter API Key: AI Commands"
+            },
+            {
                 "command": "myDevTools.clearOpenRouterApiKey",
                 "title": "Clear OpenRouter API Key"
+            },
+            {
+                "command": "myDevTools.runAiCommand",
+                "title": "Run Command",
+                "category": "AI",
+                "icon": "$(sparkle)"
+            },
+            {
+                "command": "myDevTools.editAiCommands",
+                "title": "Edit Commands File",
+                "category": "AI"
+            },
+            {
+                "command": "myDevTools.syncAiCommandsToPalette",
+                "title": "Sync Commands to Palette",
+                "category": "AI"
             },
             {
                 "command": "myDevTools.showExplorerFiles",
@@ -457,6 +520,15 @@
                         "group": "rename"
                     }
                 ]
+            }
+        ],
+        "jsonValidation": [
+            {
+                "fileMatch": [
+                    "ai-commands.json",
+                    "**/.vscode/ai-commands.json"
+                ],
+                "url": "./schemas/ai-commands.schema.json"
             }
         ],
         "keybindings": [

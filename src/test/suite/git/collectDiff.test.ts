@@ -1,6 +1,6 @@
 import * as assert from "assert";
 
-import { collectDiff, matchesGlob, resolveScope } from "../../../features/git/collectDiff";
+import { collectDiff, resolveScope } from "../../../features/git/collectDiff";
 import { cleanDiff } from "../../../features/git/diffCleaner";
 import { commitAll, createTempRepo, git, removeTempRepo, writeFile as write } from "../../helpers/tempRepo";
 
@@ -192,22 +192,4 @@ suite("CollectDiff Tests", () => {
         );
     });
 
-    suite("matchesGlob", () => {
-        test("should match a leading double star at any depth, including none", () => {
-            assert.strictEqual(matchesGlob("package-lock.json", "**/package-lock.json"), true);
-            assert.strictEqual(matchesGlob("app/package-lock.json", "**/package-lock.json"), true);
-            assert.strictEqual(matchesGlob("a/b/c/package-lock.json", "**/package-lock.json"), true);
-        });
-
-        test("should not let a single star cross a slash", () => {
-            assert.strictEqual(matchesGlob("src/app.min.js", "**/*.min.js"), true);
-            assert.strictEqual(matchesGlob("src/app.min.js", "*.min.js"), false);
-        });
-
-        test("should match a trailing double star as a directory subtree", () => {
-            assert.strictEqual(matchesGlob("dist/bundle.js", "**/dist/**"), true);
-            assert.strictEqual(matchesGlob("app/dist/nested/bundle.js", "**/dist/**"), true);
-            assert.strictEqual(matchesGlob("distant.ts", "**/dist/**"), false);
-        });
-    });
 });

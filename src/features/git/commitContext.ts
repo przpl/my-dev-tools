@@ -64,6 +64,7 @@ export async function generateCommitMessage(gitRoot: string, options: GenerateOp
                 { role: "user", content: buildUserPrompt(context) },
             ],
             temperature: 0.2,
+            keyScope: "commitMessage",
         },
         token
     );

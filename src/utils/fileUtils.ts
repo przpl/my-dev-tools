@@ -32,6 +32,20 @@ export namespace FileUtils {
         return foundFilePaths;
     }
 
+    /** The folder a file belongs to, falling back to the first open one for untitled documents. */
+    export function resolveWorkspaceFolder(uri?: vscode.Uri): vscode.WorkspaceFolder | undefined {
+        return (uri && vscode.workspace.getWorkspaceFolder(uri)) || vscode.workspace.workspaceFolders?.[0];
+    }
+
+    /** A file's contents as text, or undefined when it does not exist or cannot be read. */
+    export async function readTextIfExists(uri: vscode.Uri): Promise<string | undefined> {
+        try {
+            return new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+        } catch {
+            return undefined;
+        }
+    }
+
     export function getImportPath(fromFilePath: string, toFilePath: string): string {
         const fromDirectory = path.dirname(fromFilePath);
         const relativePath = path.relative(fromDirectory, toFilePath);

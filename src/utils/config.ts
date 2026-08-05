@@ -78,6 +78,32 @@ class ConfigManager {
     get commitMessageAdditionalInstructions(): string {
         return this.config.get<string>("commitMessage.additionalInstructions", "");
     }
+
+    /** Raw definitions: validation lives in the AI command registry, which reports per-command. */
+    get aiCommands(): unknown[] {
+        return this.config.get<unknown[]>("ai.commands", []);
+    }
+
+    get aiCommandsFile(): string {
+        return this.config.get<string>("ai.commandsFile", ".vscode/ai-commands.json");
+    }
+
+    get aiRulesDirectory(): string {
+        return this.config.get<string>("ai.rulesDirectory", ".claude/rules");
+    }
+
+    /** Empty falls back to {@link openRouterModel}, so one setting still steers everything. */
+    get aiModel(): string {
+        return this.config.get<string>("ai.model", "");
+    }
+
+    get aiMaxFileCharacters(): number {
+        return this.config.get<number>("ai.maxFileCharacters", 120000);
+    }
+
+    get aiRequestTimeoutSeconds(): number {
+        return this.config.get<number>("ai.requestTimeoutSeconds", 180);
+    }
 }
 
 export const Config = new ConfigManager();

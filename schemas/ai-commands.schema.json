@@ -1,0 +1,173 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "My Dev Tools AI commands",
+    "type": "object",
+    "required": ["commands"],
+    "properties": {
+        "commands": {
+            "type": "array",
+            "description": "The AI commands this workspace offers, listed by 'Run AI Command'",
+            "items": {
+                "$ref": "#/definitions/command"
+            }
+        }
+    },
+    "additionalProperties": false,
+    "definitions": {
+        "command": {
+            "type": "object",
+            "required": ["id", "title", "prompt"],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Stable key. Bind a keybinding to it with { \"command\": \"myDevTools.runAiCommand\", \"args\": { \"id\": \"...\" } }, and shadow a global command of the same id. Only letters, digits, '.', '-' and '_' can become a palette entry through 'AI: Sync Commands to Palette'",
+                    "pattern": "^[A-Za-z0-9._-]+$"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Label shown in the command picker"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Detail line shown under the title in the picker"
+                },
+                "prompt": {
+                    "$ref": "#/definitions/text",
+                    "description": "The instruction sent to the model. An array is joined with newlines. Supports ${input:id}, ${file}, ${relativeFile}, ${fileBasename}, ${fileBasenameNoExtension}, ${fileDirname}, ${languageId}, ${workspaceFolder} and ${selection}"
+                },
+                "system": {
+                    "$ref": "#/definitions/text",
+                    "description": "Extra system-level instructions for this command, appended to the built-in ones"
+                },
+                "globs": {
+                    "type": "array",
+                    "description": "The command is only offered for files matching one of these, e.g. [\"**/*.tsx\"]. Omit to offer it everywhere",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "selection": {
+                    "type": "string",
+                    "default": "context",
+                    "enum": ["ignore", "context", "target"],
+                    "enumDescriptions": [
+                        "Never tell the model what is selected",
+                        "Send the whole file, point at the selected range (or the caret) by its line:column coordinates, and rewrite the whole file",
+                        "Send only the selected text and replace only it; falls back to the whole file when nothing is selected"
+                    ]
+                },
+                "output": {
+                    "type": "string",
+                    "enum": ["replaceFile", "replaceSelection", "files", "insertBelow", "clipboard"],
+                    "enumDescriptions": [
+                        "The reply is the file's new content",
+                        "The reply is the selection's new content",
+                        "The reply is one or more <file path=\"...\"> blocks, created or overwritten",
+                        "The reply is inserted on a new line below the selection",
+                        "The reply is copied to the clipboard and nothing is edited"
+                    ],
+                    "description": "Defaults to replaceSelection when selection is \"target\", otherwise replaceFile"
+                },
+                "newFilePath": {
+                    "type": "string",
+                    "description": "Suggested location passed to the model when output is \"files\", e.g. ${fileDirname}/${fileBasenameNoExtension}.test.ts. The model may choose otherwise"
+                },
+                "inputs": {
+                    "type": "array",
+                    "description": "Questions asked before the request. Answers are substituted as ${input:id}",
+                    "items": {
+                        "$ref": "#/definitions/input"
+                    }
+                },
+                "rules": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Attach the rule files whose frontmatter 'paths' match the edited file"
+                },
+                "ruleFiles": {
+                    "type": "array",
+                    "description": "Rule file names always attached regardless of their 'paths', e.g. [\"testing.md\"]",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "contextFiles": {
+                    "type": "array",
+                    "description": "Extra workspace files attached read-only, as globs. Useful for handing the model an existing file as a style example",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "model": {
+                    "type": "string",
+                    "description": "OpenRouter model for this command. Defaults to myDevTools.ai.model, then myDevTools.openRouter.model"
+                },
+                "temperature": {
+                    "type": "number",
+                    "default": 0.2,
+                    "minimum": 0,
+                    "maximum": 2
+                },
+                "maxTokens": {
+                    "type": "number",
+                    "minimum": 1,
+                    "description": "Cap on the reply length. Leave unset for a whole-file rewrite, where truncation costs the file"
+                }
+            },
+            "additionalProperties": false
+        },
+        "input": {
+            "type": "object",
+            "required": ["id", "label"],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Referenced in the prompt as ${input:id}"
+                },
+                "label": {
+                    "type": "string",
+                    "description": "The question, shown as the prompt of the box"
+                },
+                "type": {
+                    "type": "string",
+                    "default": "text",
+                    "enum": ["text", "pick"],
+                    "enumDescriptions": ["A free-text input box", "A quick pick over 'options'"]
+                },
+                "required": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Escaping a required question cancels the command; escaping an optional one substitutes nothing"
+                },
+                "options": {
+                    "type": "array",
+                    "description": "The choices, when type is \"pick\"",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "default": {
+                    "type": "string",
+                    "description": "Pre-filled value"
+                },
+                "placeholder": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        },
+        "text": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            ]
+        }
+    }
+}

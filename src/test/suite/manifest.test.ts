@@ -82,7 +82,7 @@ suite("Manifest Tests", () => {
 
         // A regex over the source is only as good as its match count; this guards against it silently
         // reading nothing after `config.ts` is reformatted.
-        assert.strictEqual(codeDefaults.size, 11, "Expected 11 settings in config.ts");
+        assert.strictEqual(codeDefaults.size, 17, "Expected 17 settings in config.ts");
 
         assert.deepStrictEqual(
             [...codeDefaults.keys()].filter(key => !(key in declared)),

@@ -21,11 +21,15 @@ import { autoStage } from "./features/git/autoStage";
 import { generateCommitMessageCommand } from "./features/git/generateCommitMessage";
 import { acceptCommitMessage, generateCommitMessageInEditor } from "./features/git/commitMessageEditor";
 import { registerExplorerFileVisibility } from "./features/explorer/toggleFileVisibility";
+import { initAiCommands } from "./features/ai";
 import { initOpenRouter } from "./services/openRouter";
 
 export function activate(context: vscode.ExtensionContext) {
     // Services
     initOpenRouter(context).forEach(cmd => context.subscriptions.push(cmd));
+
+    // AI
+    initAiCommands(context).forEach(disposable => context.subscriptions.push(disposable));
 
     // Generic
     context.subscriptions.push(vscode.commands.registerCommand("myDevTools.openNearestIndex", () => openNearestFile("index.ts")));

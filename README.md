@@ -66,6 +66,113 @@ This feature allows you to quickly hide or show files in the Explorer based on y
 | Add undefined props to interface   | Command palette             | Detects undefined symbols used in JSX and adds them to the Props interface with smart type guessing.                                  |
 | Add className to React Props       | Command palette             | Adds `className?: string` to the Props interface. Creates Props interface if it doesn't exist.                                        |
 
+## AI Commands
+
+| Option                       | Available in    | Description                                                                                          |
+| ---------------------------- | --------------- | ------------------------------------------------------------------------------------------------------ |
+| AI: Run Command              | Command palette | Runs one of your own commands against the open file through OpenRouter, and shows the result as a diff. |
+| AI: Edit Commands File       | Command palette | Opens the workspace's commands file, creating it from a worked example if there is none.               |
+| AI: Sync Commands to Palette | Command palette | Puts each of your commands in the palette as its own `AI: <title>` entry.                              |
+
+Nothing is built in - every command is your own JSON: what to ask the model, which files to offer it for, what to ask you first, and what to do with the answer.
+
+Commands are merged by `id` from `myDevTools.ai.commands` (settings, every project) and `.vscode/ai-commands.json` (this workspace, wins on conflict). The file has a contributed schema, so you get completion, comments and trailing commas.
+
+#### Commands in the palette
+
+`AI: Run Command` lists everything, filtered to the open file's `globs`. To skip that step, run **AI: Sync Commands to Palette** once: each command becomes a top-level `AI: <title>` entry, shown only for the files its `globs` match, so a `**/*.tsx` command is absent from the palette while you are in a `.ts` file. Reload the window when asked - the palette is built from the extension's manifest at startup, which is what the sync writes and why a reload is needed.
+
+Run it again after adding, renaming or reglobbing a command, and after reinstalling the extension, which restores the packaged manifest and with it drops the entries. An `id` can only become a palette entry if it is made of letters, digits, `.`, `-` and `_`; the sync names any it had to skip. Commands from a workspace file are synced too, but the manifest is shared by every window, so a project-specific command stays in the palette until the next sync.
+
+Every run opens a diff; nothing is written until you press Apply, and applying is a single undo away however many files it touched. A notification reports cost and duration.
+
+```jsonc
+{
+    "commands": [
+        {
+            "id": "add-props",
+            "title": "Add missing props",
+            "globs": ["**/*.tsx"],
+            "selection": "context",
+            "output": "replaceFile",
+            "prompt": "Add every prop the component reads but does not declare to its Props interface."
+        },
+        {
+            "id": "write-tests",
+            "title": "Write unit tests",
+            "globs": ["**/*.ts", "**/*.tsx"],
+            "output": "files",
+            "newFilePath": "${fileDirname}/${fileBasenameNoExtension}.test.ts",
+            "ruleFiles": ["testing.md"],
+            "inputs": [{ "id": "focus", "label": "Anything the tests should focus on?" }],
+            "prompt": ["Write unit tests for the selected code.", "${input:focus}"]
+        }
+    ]
+}
+```
+
+#### Command fields
+
+| Field                                | Default            | Purpose                                                                                                       |
+| ------------------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `id`, `title`, `prompt`              | required           | `prompt` may be an array of lines. A key can be bound to one command with `"args": { "id": "..." }`.             |
+| `description`                        | —                  | Detail line in the picker.                                                                                       |
+| `globs`                              | every file         | The command is only offered for files matching one of these, both in the picker and in the palette.              |
+| `selection`                          | `context`          | `ignore`, `context` (whole file sent and rewritten, with the selected range — or the caret — pointed at by its `line:column` coordinates) or `target` (only the selection sent and replaced). |
+| `output`                             | follows `selection` | `replaceFile`, `replaceSelection`, `files`, `insertBelow` or `clipboard`.                                        |
+| `newFilePath`                        | —                  | Location suggested to the model when `output` is `files`. It may choose otherwise, and may write several files.  |
+| `inputs`                             | none               | Questions asked before the request: `{ id, label, type: "text" \| "pick", required, options, default, placeholder }`. |
+| `rules`, `ruleFiles`                 | `true`, —          | See below.                                                                                                       |
+| `contextFiles`                       | —                  | Globs for extra files attached read-only, e.g. an existing test as a style example.                              |
+| `model`, `temperature`, `maxTokens`  | —, `0.2`, —        | Per-command overrides.                                                                                           |
+
+`prompt`, `system` and `newFilePath` accept `${input:<id>}` and VS Code's own file variables: `${file}`, `${relativeFile}`, `${fileBasename}`, `${fileBasenameNoExtension}`, `${fileDirname}`, `${languageId}`, `${workspaceFolder}` and `${selection}`.
+
+#### Project rules
+
+Markdown files in `.claude/rules` whose frontmatter `paths` match the edited file are attached to the prompt, so commands follow the project's conventions without repeating them:
+
+```yaml
+---
+paths:
+    - "**/*.ts"
+    - "**/*.tsx"
+---
+```
+
+`"rules": false` sends none; `"ruleFiles": ["testing.md"]` attaches a file whatever its `paths` say.
+
+#### Settings
+
+| Setting                              | Default                    | Purpose                                                             |
+| ------------------------------------ | -------------------------- | --------------------------------------------------------------------- |
+| `myDevTools.ai.commands`             | `[]`                       | Commands available in every project.                                  |
+| `myDevTools.ai.commandsFile`         | `.vscode/ai-commands.json` | Where this project's commands live.                                   |
+| `myDevTools.ai.rulesDirectory`       | `.claude/rules`            | Where the rule files live.                                            |
+| `myDevTools.ai.model`                | empty                      | Default model for AI commands; falls back to `myDevTools.openRouter.model`. |
+| `myDevTools.ai.maxFileCharacters`    | `120000`                   | A larger file is refused rather than sent.                            |
+| `myDevTools.ai.requestTimeoutSeconds` | `180`                      | How long to wait for the model.                                       |
+
+The API key is the same one the commit message feature uses — run "Set OpenRouter API Key" once. To bill AI commands to a key of their own, see [Splitting cost across keys](#splitting-cost-across-keys).
+
+## Splitting cost across keys
+
+By default every feature bills one shared key. If you want to know what commit messages cost you versus AI commands, give them separate keys: OpenRouter's activity panel groups spend by model and by API key, and by nothing finer, so a separate key is the only way to get a separate line in that report.
+
+1. Mint one key per feature at [openrouter.ai/keys](https://openrouter.ai/keys) and name them so the report reads well ("vscode-commit-messages", "vscode-ai-commands"). While you are there you can also give a key a credit limit with a daily, weekly or monthly reset, which caps that feature's spend server-side.
+2. Run "Set OpenRouter API Key: Commit Messages" or "Set OpenRouter API Key: AI Commands" from the palette. Plain "Set OpenRouter API Key" asks which scope you mean instead, and shows which ones already have a key of their own.
+3. Read the split under Activity, grouped by API key, or export it as CSV.
+
+Setting a key always replaces it: the input box starts empty and no command ever shows a stored key back to you.
+
+A feature with no key of its own falls through to the shared key, so you only have to set the ones you care about. "Clear OpenRouter API Key" on a feature drops it back to the shared key; the picker shows which is which.
+
+| Scope           | Used by                                | Falls back to |
+| --------------- | -------------------------------------- | ------------- |
+| Shared key      | Everything with no key of its own       | `OPENROUTER_API_KEY` in the environment |
+| Commit messages | Every generated commit message, wherever it is triggered from | Shared key |
+| AI commands     | Run AI Command                          | Shared key    |
+
 ## Git
 
 | Option                  | Available in                             | Description                                                                                                     |
@@ -79,7 +186,7 @@ This feature allows you to quickly hide or show files in the Explorer based on y
 
 Fills the Source Control message box with a message that follows Conventional Commits. Press the sparkle icon in the Source Control **title bar**, or run "Generate Commit Message (My Dev Tools)" from the palette.
 
-Before the first use, run "Set OpenRouter API Key" and paste a key from [openrouter.ai/keys](https://openrouter.ai/keys). It is kept in VS Code's secret storage; `OPENROUTER_API_KEY` in the environment is used as a fallback. The model is `myDevTools.openRouter.model` and can be anything OpenRouter serves.
+Before the first use, run "Set OpenRouter API Key", choose **Shared key**, and paste a key from [openrouter.ai/keys](https://openrouter.ai/keys). It is kept in VS Code's secret storage; `OPENROUTER_API_KEY` in the environment is used as a fallback. The model is `myDevTools.openRouter.model` and can be anything OpenRouter serves.
 
 Whatever you have already typed into the message box is sent along as a hint about your intent, then replaced by the finished message.
 
