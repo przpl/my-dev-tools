@@ -1,6 +1,6 @@
 import { camelCase, kebabCase, pascalCase, snakeCase } from "es-toolkit";
 import * as path from "node:path";
-import { ExportedDeclarations, SyntaxKind } from "ts-morph";
+import { ExportedDeclarations, SyntaxKind } from "../utils/tsMorph";
 import * as vscode from "vscode";
 
 import { Config } from "../utils/config";

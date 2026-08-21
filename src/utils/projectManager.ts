@@ -1,4 +1,4 @@
-import { Project, SourceFile } from "ts-morph";
+import { Project, SourceFile } from "./tsMorph";
 
 /**
  * Centralized manager for ts-morph Project instances.

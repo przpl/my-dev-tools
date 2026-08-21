@@ -1,5 +1,5 @@
 import * as path from "path";
-import { ts } from "ts-morph";
+import { ts } from "../../utils/tsMorph";
 
 /**
  * Reduces a newly added file to the part a commit message can use. A new file is the one case where
@@ -19,16 +19,25 @@ export function isMarkdownFile(filePath: string): boolean {
     return MARKDOWN_FILE.test(path.extname(filePath));
 }
 
-const SCRIPT_KINDS = new Map<string, ts.ScriptKind>([
-    [".ts", ts.ScriptKind.TS],
-    [".mts", ts.ScriptKind.TS],
-    [".cts", ts.ScriptKind.TS],
-    [".tsx", ts.ScriptKind.TSX],
-    [".js", ts.ScriptKind.JS],
-    [".mjs", ts.ScriptKind.JS],
-    [".cjs", ts.ScriptKind.JS],
-    [".jsx", ts.ScriptKind.JSX],
-]);
+/** Read through a function rather than a module-scope table, so the parser loads only once a file is summarized. */
+function scriptKindOf(extension: string): ts.ScriptKind | undefined {
+    switch (extension) {
+        case ".ts":
+        case ".mts":
+        case ".cts":
+            return ts.ScriptKind.TS;
+        case ".tsx":
+            return ts.ScriptKind.TSX;
+        case ".js":
+        case ".mjs":
+        case ".cjs":
+            return ts.ScriptKind.JS;
+        case ".jsx":
+            return ts.ScriptKind.JSX;
+        default:
+            return undefined;
+    }
+}
 
 /** A generated or vendored file that slipped past the exclusions is not worth the parse. */
 const MAX_PARSED_LENGTH = 2 * 1024 * 1024;
@@ -88,7 +97,7 @@ function collectBodySpans(sourceFile: ts.SourceFile): Span[] {
  * when the file will not parse or when the summary would not actually be shorter.
  */
 export function summarizeScript(filePath: string, source: string): string | undefined {
-    const scriptKind = SCRIPT_KINDS.get(path.extname(filePath).toLowerCase());
+    const scriptKind = scriptKindOf(path.extname(filePath).toLowerCase());
     if (!scriptKind || source.length > MAX_PARSED_LENGTH) {
         return undefined;
     }

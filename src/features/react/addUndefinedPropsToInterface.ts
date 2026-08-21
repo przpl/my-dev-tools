@@ -1,4 +1,4 @@
-import { ArrowFunction, BindingElement, FunctionDeclaration, Node, SyntaxKind } from "ts-morph";
+import { ArrowFunction, BindingElement, FunctionDeclaration, Node, SyntaxKind } from "../../utils/tsMorph";
 import * as vscode from "vscode";
 
 import { ReactUtils } from "../../utils/reactUtils";

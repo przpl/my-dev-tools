@@ -23,3 +23,5 @@ VS Code extension built with TypeScript and ts-morph for AST manipulation, provi
 
 -   Use ts-morph `Project` instances for TypeScript code analysis and transformation
 -   Apply changes via VS Code WorkspaceEdit rather than direct file system writes
+-   Import ts-morph from `utils/tsMorph`, never from `ts-morph` directly: it ships as a separate `out/ts-morph.js` that loads on first use, which is what keeps activation cheap
+-   Never touch a ts-morph export while a module body is evaluating - module bodies run at activation. Lookup tables built from `ts.SyntaxKind` or `ts.ScriptKind` belong inside a function

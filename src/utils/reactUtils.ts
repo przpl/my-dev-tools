@@ -1,4 +1,4 @@
-import { ArrowFunction, FunctionDeclaration, InterfaceDeclaration, Node, Project, SourceFile, SyntaxKind } from "ts-morph";
+import { ArrowFunction, FunctionDeclaration, InterfaceDeclaration, Node, Project, SourceFile, SyntaxKind } from "./tsMorph";
 import * as vscode from "vscode";
 
 import { ProjectManager } from "./projectManager";

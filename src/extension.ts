@@ -1,5 +1,5 @@
 import { debounce } from "es-toolkit";
-import { InterfaceDeclaration, SyntaxKind } from "ts-morph";
+import { InterfaceDeclaration, SyntaxKind } from "./utils/tsMorph";
 import * as vscode from "vscode";
 
 import { addToExportsInIndex } from "./features/addToExportsInIndex";

@@ -1,4 +1,4 @@
-import { SyntaxKind, ts } from "ts-morph";
+import { SyntaxKind, ts } from "../../utils/tsMorph";
 import * as vscode from "vscode";
 
 import { FileUtils } from "../../utils/fileUtils";

@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 
 import { FileUtils } from "../utils/fileUtils";
 import { ProjectManager } from "../utils/projectManager";
-import type { SourceFile } from "ts-morph";
+import type { SourceFile } from "../utils/tsMorph";
 
 export async function addToExportsInIndex() {
     const activeEditor = vscode.window.activeTextEditor;

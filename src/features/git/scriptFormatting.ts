@@ -1,5 +1,5 @@
 import * as path from "path";
-import { ts } from "ts-morph";
+import { ts } from "../../utils/tsMorph";
 
 /**
  * Decides whether two versions of a TypeScript or JavaScript file are the same program. `git diff
@@ -9,26 +9,40 @@ import { ts } from "ts-morph";
  * and compared as token streams instead.
  */
 
-const SCRIPT_KINDS = new Map<string, ts.ScriptKind>([
-    [".ts", ts.ScriptKind.TS],
-    [".mts", ts.ScriptKind.TS],
-    [".cts", ts.ScriptKind.TS],
-    [".tsx", ts.ScriptKind.TSX],
-    // ScriptKind.JS and .JSX both parse with the JSX language variant, which is what `.js` React files need.
-    [".js", ts.ScriptKind.JS],
-    [".mjs", ts.ScriptKind.JS],
-    [".cjs", ts.ScriptKind.JS],
-    [".jsx", ts.ScriptKind.JSX],
-]);
+/**
+ * Kept as extensions rather than as a map to `ts.ScriptKind`, so that answering {@link isScriptFile}
+ * - which the diff asks about every changed path - never loads the parser. See `utils/tsMorph.ts`.
+ */
+const SCRIPT_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx", ".js", ".mjs", ".cjs", ".jsx"]);
+
+function scriptKindOf(extension: string): ts.ScriptKind | undefined {
+    switch (extension) {
+        case ".ts":
+        case ".mts":
+        case ".cts":
+            return ts.ScriptKind.TS;
+        case ".tsx":
+            return ts.ScriptKind.TSX;
+        // ScriptKind.JS and .JSX both parse with the JSX language variant, which is what `.js` React files need.
+        case ".js":
+        case ".mjs":
+        case ".cjs":
+            return ts.ScriptKind.JS;
+        case ".jsx":
+            return ts.ScriptKind.JSX;
+        default:
+            return undefined;
+    }
+}
 
 const COMMENT_ENTRY = -1;
 
 export function isScriptFile(filePath: string): boolean {
-    return SCRIPT_KINDS.has(path.extname(filePath).toLowerCase());
+    return SCRIPT_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
 function parse(filePath: string, text: string): ts.SourceFile | undefined {
-    const scriptKind = SCRIPT_KINDS.get(path.extname(filePath).toLowerCase());
+    const scriptKind = scriptKindOf(path.extname(filePath).toLowerCase());
     if (!scriptKind) {
         return undefined;
     }
@@ -212,7 +226,13 @@ function tokensEqual(a: Token[], b: Token[]): boolean {
     return a.length === b.length && a.every((token, i) => token.kind === b[i].kind && token.text === b[i].text);
 }
 
-const CLOSING_KINDS = new Set<number>([ts.SyntaxKind.CloseParenToken, ts.SyntaxKind.CloseBracketToken, ts.SyntaxKind.CloseBraceToken]);
+/** Built on first use rather than at module scope, so the parser stays unloaded until it is needed. */
+let closingKinds: Set<number> | undefined;
+
+function isClosingKind(kind: number | undefined): boolean {
+    closingKinds ??= new Set([ts.SyntaxKind.CloseParenToken, ts.SyntaxKind.CloseBracketToken, ts.SyntaxKind.CloseBraceToken]);
+    return kind !== undefined && closingKinds.has(kind);
+}
 
 /**
  * Drops the punctuation whose presence a formatter decides on its own: the parentheses around a
@@ -232,7 +252,7 @@ function withoutLayoutTokens(tokens: Token[]): Token[] {
         }
 
         // The neighbour is read from the unfiltered stream because the closing bracket may itself be dropped.
-        return !(token.kind === ts.SyntaxKind.CommaToken && CLOSING_KINDS.has(tokens[i + 1]?.kind));
+        return !(token.kind === ts.SyntaxKind.CommaToken && isClosingKind(tokens[i + 1]?.kind));
     });
 }
 
