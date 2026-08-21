@@ -562,24 +562,24 @@
     "devDependencies": {
         "@types/mocha": "^10.0.10",
         "@types/node": "^24.13.3",
-        "@types/vscode": "^1.125.0",
+        "@types/vscode": "^1.134.0",
         "@vscode/test-electron": "^3.1.0",
         "@vscode/vsce": "^3.9.2",
-        "esbuild": "^0.28.1",
+        "esbuild": "^0.28.2",
         "mocha": "^11.8.0",
         "rimraf": "^6.1.3",
         "typescript": "^7.0.2"
     },
     "dependencies": {
-        "es-toolkit": "^1.50.0",
+        "es-toolkit": "^1.51.0",
         "ignore": "^7.0.6",
         "istextorbinary": "^9.5.0",
         "jsonc-parser": "^3.3.1",
         "ts-morph": "^28.0.0"
     },
     "allowScripts": {
-        "@vscode/vsce-sign@2.0.9": true,
-        "esbuild@0.28.1": true,
+        "@vscode/vsce-sign@2.1.0": true,
+        "esbuild@0.28.2": true,
         "keytar@7.9.0": true
     }
 }
