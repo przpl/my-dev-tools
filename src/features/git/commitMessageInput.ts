@@ -74,7 +74,7 @@ export function promptForCommitMessage(gitRoot: string, paths: string[], targetB
             input.enabled = false;
 
             try {
-                const message = await generateCommitMessage(gitRoot, { paths, hint: input.value.trim() || undefined });
+                const message = await generateCommitMessage(gitRoot, { paths, hint: input.value.trim() || undefined, targetBranch });
 
                 if (settled) {
                     return;

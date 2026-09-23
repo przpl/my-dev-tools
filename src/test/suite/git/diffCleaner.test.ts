@@ -489,6 +489,43 @@ suite("DiffCleaner Tests", () => {
         });
     });
 
+    suite("line counts", () => {
+        const modified = [
+            "diff --git a/src/app.ts b/src/app.ts",
+            "--- a/src/app.ts",
+            "+++ b/src/app.ts",
+            "@@ -1,2 +1,3 @@",
+            "-const b = 2;",
+            "+const b = 3;",
+            "+const c = 4;",
+        ].join("\n");
+
+        test("should append the size of the change to the header when asked", () => {
+            assert.ok(clean(modified, { lineCounts: true }).startsWith("--- src/app.ts [+2 -1]\n"));
+        });
+
+        test("should leave the header alone by default", () => {
+            assert.ok(clean(modified).startsWith("--- src/app.ts\n"));
+        });
+
+        test("should count the file as written, not as summarized", () => {
+            const body = Array.from({ length: 80 }, (_, index) => `+export const value${index} = ${index};`);
+            const raw = ["diff --git a/src/new.ts b/src/new.ts", "new file mode 100644", "--- /dev/null", "+++ b/src/new.ts", "@@ -0,0 +1,80 @@", ...body].join("\n");
+
+            const cleaned = clean(raw, { lineCounts: true, summarizeAddedScriptsAboveLines: 60, maxCharacters: 300 });
+
+            assert.ok(cleaned.startsWith("+++ NEW src/new.ts [+80 -0]\n"), cleaned);
+        });
+
+        test("should not size a file that carries a note", () => {
+            // A second, real change: a diff that is nothing but a reformat falls back to the raw diff.
+            const other = ["diff --git a/src/b.ts b/src/b.ts", "--- a/src/b.ts", "+++ b/src/b.ts", "@@ -1 +1 @@", "-const x = 1;", "+const x = 2;"].join("\n");
+            const cleaned = clean(`${modified}\n${other}`, { lineCounts: true, formattingOnlyPaths: new Set(["src/app.ts"]) });
+
+            assert.ok(cleaned.startsWith("--- src/app.ts\n(formatting only)\n\n--- src/b.ts [+1 -1]\n"), cleaned);
+        });
+    });
+
     suite("parseDiff", () => {
         test("should round-trip a path containing spaces", () => {
             const raw = [

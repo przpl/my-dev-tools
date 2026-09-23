@@ -1,9 +1,13 @@
+import * as path from "path";
+
 import { Config } from "../../utils/config";
 import { getOpenRouter } from "../../services/openRouter";
-import { collectDiff, resolveScope } from "./collectDiff";
+import { collectDiff, listLeftOutChanges, resolveScope, type ChangedFile } from "./collectDiff";
 import { buildSystemPrompt, buildUserPrompt, sanitizeCommitMessage, type CommitContext } from "./commitMessagePrompt";
-import { cleanDiff } from "./diffCleaner";
-import { execGit } from "./gitCli";
+import { cleanDiff, parseDiff } from "./diffCleaner";
+import { findGitDir } from "./gitCli";
+import { findMovedBlocks } from "./movedCode";
+import { describingBranch, readBranch, readBranchCommits, readInProgressOperation, readScopeUsage } from "./repositoryState";
 
 import type * as vscode from "vscode";
 
@@ -14,14 +18,8 @@ export interface GenerateOptions {
     paths?: string[];
     /** Text already in the message box, passed along as intent. */
     hint?: string;
-}
-
-async function readBranch(gitRoot: string): Promise<string | undefined> {
-    try {
-        return (await execGit(gitRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).trim() || undefined;
-    } catch {
-        return undefined;
-    }
+    /** The branch the commit lands on, when that is not the checked-out one, as Commit to Branch does. */
+    targetBranch?: string;
 }
 
 export class NothingToDescribeError extends Error {
@@ -29,6 +27,35 @@ export class NothingToDescribeError extends Error {
         super("There are no changes to describe.");
         this.name = "NothingToDescribeError";
     }
+}
+
+/**
+ * Where to look for the history of these files. A new file has none, so its directory stands in for
+ * it; a renamed one has its history under the old name.
+ */
+function historyPaths(files: ChangedFile[]): string[] {
+    const paths = new Set<string>();
+
+    for (const file of files) {
+        if (file.excluded) {
+            continue;
+        }
+
+        if (file.status === "A" || file.status === "?") {
+            const directory = path.posix.dirname(file.path);
+            if (directory !== ".") {
+                paths.add(directory);
+            }
+            continue;
+        }
+
+        paths.add(file.path);
+        if (file.previousPath) {
+            paths.add(file.previousPath);
+        }
+    }
+
+    return [...paths];
 }
 
 export async function buildCommitContext(gitRoot: string, options: GenerateOptions = {}): Promise<CommitContext> {
@@ -39,9 +66,29 @@ export async function buildCommitContext(gitRoot: string, options: GenerateOptio
         throw new NothingToDescribeError();
     }
 
+    const gitDir = await findGitDir(gitRoot);
+    const branch = describingBranch(options.targetBranch ?? (await readBranch(gitRoot, gitDir)));
+
+    // A commit headed elsewhere continues that branch's story, not the checked-out one's.
+    const ref = options.targetBranch ? `refs/heads/${options.targetBranch}` : "HEAD";
+
+    const [branchCommits, scopeUsage, leftOut] = await Promise.all([
+        branch ? readBranchCommits(gitRoot, ref) : undefined,
+        readScopeUsage(gitRoot, ref, historyPaths(collected.files)),
+        listLeftOutChanges(gitRoot, scope, collected.files),
+    ]);
+
+    const parsed = parseDiff(collected.diff);
+
     return {
-        branch: await readBranch(gitRoot),
+        branch,
+        branchCommits,
+        // Commit to Branch builds its commit beside whatever the checked-out branch is in the middle of.
+        operation: gitDir && !options.targetBranch ? readInProgressOperation(gitDir) : undefined,
+        leftOut,
+        scopeUsage,
         files: collected.files,
+        diffedPaths: new Set(parsed.map(file => file.path)),
         hint: options.hint,
         diff: cleanDiff(collected.diff, {
             maxCharacters: Config.commitMessageMaxDiffCharacters,
@@ -50,6 +97,8 @@ export async function buildCommitContext(gitRoot: string, options: GenerateOptio
             outlineAddedMarkdownAboveLines: Config.commitMessageOutlineAddedMarkdownAboveLines,
             maxLineLength: Config.commitMessageMaxDiffLineLength,
             formattingOnlyPaths: collected.formattingOnlyPaths,
+            lineCounts: true,
+            movedBlocks: findMovedBlocks(parsed),
         }),
     };
 }

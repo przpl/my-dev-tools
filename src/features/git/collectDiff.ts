@@ -217,6 +217,42 @@ async function readTrackedDiff(
     return execGitRaw(gitRoot, ["diff", ...revisions, ...widened, "--", ...paths, ...exclusions]);
 }
 
+export interface LeftOutChanges {
+    /** Files in this commit that have further unstaged edits the commit does not record. */
+    partiallyStaged: string[];
+    /** Changed tracked files that are not in this commit at all. */
+    otherFiles: string[];
+}
+
+function isWholeRepository(scope: DiffScope): boolean {
+    return scope.paths.length === 1 && scope.paths[0] === ".";
+}
+
+/**
+ * The changes this commit leaves behind, so a slice of the work is described as a slice. Untracked
+ * files are not counted: they are as often scratch output as unfinished work.
+ *
+ * Only two scopes leave anything out: the index of the whole repository, and the named files of a
+ * Quick Commit. Everything uncommitted is, by definition, everything.
+ */
+export async function listLeftOutChanges(gitRoot: string, scope: DiffScope, files: ChangedFile[]): Promise<LeftOutChanges | undefined> {
+    let unstaged: string[];
+
+    if (scope.staged && isWholeRepository(scope)) {
+        unstaged = splitNulTerminated(await execGitRaw(gitRoot, ["diff", "--name-only", "-z", "--", "."]));
+    } else if (!scope.staged && !isWholeRepository(scope)) {
+        unstaged = splitNulTerminated(await execGitRaw(gitRoot, ["diff", "HEAD", "--name-only", "-z", "--", "."]));
+    } else {
+        return undefined;
+    }
+
+    const inCommit = new Set(files.map(file => file.path));
+    const partiallyStaged = scope.staged ? unstaged.filter(file => inCommit.has(file)) : [];
+    const otherFiles = unstaged.filter(file => !inCommit.has(file));
+
+    return partiallyStaged.length > 0 || otherFiles.length > 0 ? { partiallyStaged, otherFiles } : undefined;
+}
+
 export async function collectDiff(gitRoot: string, scope: DiffScope, excludeGlobs: readonly string[]): Promise<CollectedDiff> {
     const { revisions, paths } = scope;
     const exclusions = excludePathspecs(excludeGlobs);

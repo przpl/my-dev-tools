@@ -65,6 +65,57 @@ suite("CommitMessagePrompt Tests", () => {
             assert.ok(prompt.includes("yarn.lock   [excluded from diff]"), prompt);
         });
 
+        test("should not list a file the diff already shows", () => {
+            const files = [file(), file({ path: "yarn.lock", excluded: true }), file({ path: "src/mode.sh" })];
+            const prompt = buildUserPrompt({ ...base, files, diffedPaths: new Set(["src/app.ts"]) });
+
+            assert.ok(prompt.includes("Also changed, not shown in the diff:\n  M  yarn.lock   [excluded from diff]\n  M  src/mode.sh"), prompt);
+            assert.ok(!prompt.includes("M  src/app.ts"), prompt);
+        });
+
+        test("should drop the file list when the diff shows every file", () => {
+            const prompt = buildUserPrompt({ ...base, diffedPaths: new Set(["src/app.ts"]) });
+
+            assert.ok(!prompt.includes("Files changed"), prompt);
+            assert.ok(!prompt.includes("Also changed"), prompt);
+        });
+
+        test("should list the branch's earlier commits and say when some are held back", () => {
+            const prompt = buildUserPrompt({ ...base, branch: "feature/x", branchCommits: { subjects: ["feat(x): add y", "feat(x): add z"], total: 30 } });
+
+            assert.ok(prompt.includes("Earlier commits on this branch (30, newest 2 shown, newest first)"), prompt);
+            assert.ok(prompt.includes("\n  feat(x): add y\n  feat(x): add z"), prompt);
+        });
+
+        test("should describe an operation in progress with its prepared message and conflicts", () => {
+            const prompt = buildUserPrompt({
+                ...base,
+                operation: { kind: "merge", message: "Merge branch 'main' into x", conflicts: ["src/a.ts", "src/b.ts"] },
+            });
+
+            assert.ok(prompt.includes("A merge is in progress."), prompt);
+            assert.ok(prompt.includes("Git's prepared message:\n  Merge branch 'main' into x"), prompt);
+            assert.ok(prompt.includes("Files that had conflicts: src/a.ts, src/b.ts"), prompt);
+        });
+
+        test("should name what the commit leaves out, capping long lists", () => {
+            const otherFiles = Array.from({ length: 12 }, (_, index) => `src/f${index}.ts`);
+            const prompt = buildUserPrompt({ ...base, leftOut: { partiallyStaged: ["src/app.ts"], otherFiles } });
+
+            assert.ok(prompt.includes("further unstaged edits to src/app.ts"), prompt);
+            assert.ok(prompt.includes("12 other changed files: src/f0.ts,"), prompt);
+            assert.ok(prompt.includes("src/f9.ts and 2 more"), prompt);
+        });
+
+        test("should report the scopes earlier commits used", () => {
+            const prompt = buildUserPrompt({
+                ...base,
+                scopeUsage: { scopes: [{ name: "git", count: 12 }, { name: "ai", count: 2 }], unscoped: 5, examined: 30 },
+            });
+
+            assert.ok(prompt.includes("Scopes used by the last 30 commits touching these paths: git (12), ai (2); 5 used no scope."), prompt);
+        });
+
         test("should carry the diff", () => {
             assert.ok(buildUserPrompt(base).includes("Diff:\n@@\n+const a = 1;\n"));
         });

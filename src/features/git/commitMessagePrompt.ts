@@ -1,4 +1,5 @@
-import type { ChangedFile } from "./collectDiff";
+import type { ChangedFile, LeftOutChanges } from "./collectDiff";
+import type { BranchCommits, InProgressOperation, ScopeUsage } from "./repositoryState";
 
 /**
  * The commit message specification, sent verbatim as the system prompt. It is the whole product of
@@ -129,6 +130,9 @@ message box, so anything that is not part of the message ends up in the reposito
 The diff you are given has been compacted. The compaction is not part of the change, so never
 describe it:
 
+- Each file opens with a header naming its change: \`+++ NEW path\`, \`--- DELETED path\`, \`RENAMED old -> new\`, or \`--- path\` for a modification
+- \`-[12 lines moved to path]\` and \`+[12 lines moved from path]\` each stand for a block relocated between files unchanged apart from indentation; both halves are collapsed because together they show nothing but the move. The indented lines under a \`moved to\` marker are the block's outermost lines, naming what moved. Describe a move or an extraction as one, not as new code plus a removal
+- \`[+12 -3]\` after a header counts the lines the author added and removed, before compaction: it is the true size of that file's change even where the body below is summarized or cut short
 - Hashes, line numbers and surrounding context are removed; a hunk header keeps only the enclosing declaration
 - A file marked \`(formatting only)\`, \`(import/export changes only)\` or \`(binary)\` changed in that way and no other
 - Under \`@@ new file, declarations only\`, a new file is shown as its declaration surface. \`{ /* 12 lines */ }\` stands for a body that was written but is not shown — it is not an empty or unfinished function
@@ -148,11 +152,26 @@ export function buildSystemPrompt(additionalInstructions: string): string {
 
 export interface CommitContext {
     branch?: string;
+    /** What the branch already holds beyond its base, so this commit continues rather than repeats it. */
+    branchCommits?: BranchCommits;
+    /** A merge, rebase, cherry-pick or revert git is in the middle of. */
+    operation?: InProgressOperation;
+    leftOut?: LeftOutChanges;
+    /** The scopes earlier commits to the same paths used. */
+    scopeUsage?: ScopeUsage;
     files: ChangedFile[];
+    /**
+     * Paths that appear in the diff with a header of their own. Those are not listed again; without
+     * this set every file is listed.
+     */
+    diffedPaths?: ReadonlySet<string>;
     diff: string;
     /** Whatever the author had already typed into the commit box. */
     hint?: string;
 }
+
+/** A long list of names is a count with examples; past this many, only the count is new. */
+const MAX_NAMED_FILES = 10;
 
 function describeFile(file: ChangedFile): string {
     const rename = file.previousPath ? ` (from ${file.previousPath})` : "";
@@ -160,14 +179,111 @@ function describeFile(file: ChangedFile): string {
     return `  ${file.status}  ${file.path}${rename}${excluded}`;
 }
 
+function nameFiles(paths: string[]): string {
+    const named = paths.slice(0, MAX_NAMED_FILES).join(", ");
+    return paths.length > MAX_NAMED_FILES ? `${named} and ${paths.length - MAX_NAMED_FILES} more` : named;
+}
+
+function describeBranch(branch: string, commits: BranchCommits | undefined): string {
+    const lines = [
+        `Branch: ${branch}`,
+        "The branch name often carries the intent behind the change, sometimes its type or an issue key. Use it to understand why, not as text to copy; where it disagrees with the diff, the diff wins. " +
+            "A branch covers many commits, so describe this change, not the whole branch. Add an issue footer only when the key is unambiguous.",
+    ];
+
+    if (commits) {
+        const shown = commits.subjects.length < commits.total ? `, newest ${commits.subjects.length} shown` : "";
+        lines.push(
+            "",
+            `Earlier commits on this branch (${commits.total}${shown}, newest first). They show where this change fits and which scopes and wording the branch uses. ` +
+                "Stay consistent with them, but never re-describe work they already cover or copy their titles:",
+            ...commits.subjects.map(subject => `  ${subject}`)
+        );
+    }
+
+    return lines.join("\n");
+}
+
+const OPERATION_GUIDANCE: Record<InProgressOperation["kind"], string> = {
+    merge:
+        "The diff is what the merge brings in, not new work by the author. Keep git's merge title as the title. " +
+        "Add a body only to summarize what the merged work contributes, or how a conflict was resolved when the diff shows it.",
+    rebase:
+        "This commit replays an existing one, and git's prepared message is the original. Keep it; " +
+        "change it only where the diff shows the change no longer matches it, as after resolving a conflict.",
+    "cherry-pick":
+        "This commit replays an existing one, and git's prepared message is the original. Keep it; " +
+        "change it only where the diff shows the change no longer matches it, as after resolving a conflict.",
+    revert:
+        "This commit undoes an earlier one, and git's prepared message names it. Keep that identification, " +
+        "and add a body saying why the change is being reverted only when the author's hint gives the reason.",
+};
+
+function describeOperation(operation: InProgressOperation): string {
+    const lines = [`A ${operation.kind} is in progress. ${OPERATION_GUIDANCE[operation.kind]}`];
+
+    if (operation.message) {
+        lines.push("", "Git's prepared message:", ...operation.message.split("\n").map(line => `  ${line}`));
+    }
+
+    if (operation.conflicts.length > 0) {
+        lines.push("", `Files that had conflicts: ${nameFiles(operation.conflicts)}`);
+    }
+
+    return lines.join("\n");
+}
+
+function describeLeftOut(leftOut: LeftOutChanges): string {
+    const lines = ["Not part of this commit, so never describe it:"];
+
+    if (leftOut.partiallyStaged.length > 0) {
+        lines.push(`  further unstaged edits to ${nameFiles(leftOut.partiallyStaged)}`);
+    }
+
+    if (leftOut.otherFiles.length > 0) {
+        const count = leftOut.otherFiles.length;
+        lines.push(`  ${count} other changed ${count === 1 ? "file" : "files"}: ${nameFiles(leftOut.otherFiles)}`);
+    }
+
+    lines.push("This commit is one slice of work in progress; its message covers the diff alone.");
+    return lines.join("\n");
+}
+
+function describeScopeUsage(usage: ScopeUsage): string {
+    const scopes = usage.scopes.map(scope => `${scope.name} (${scope.count})`).join(", ");
+    const unscoped = usage.unscoped > 0 ? `; ${usage.unscoped} used no scope` : "";
+
+    return (
+        `Scopes used by the last ${usage.examined} commits touching these paths: ${scopes}${unscoped}.\n` +
+        "When one of them names the part of the codebase this change is in, use it rather than coining a synonym. The rules on when to use or omit a scope still apply."
+    );
+}
+
 export function buildUserPrompt(context: CommitContext): string {
     const sections: string[] = [];
 
     if (context.branch) {
-        sections.push(`Branch: ${context.branch}`);
+        sections.push(describeBranch(context.branch, context.branchCommits));
     }
 
-    sections.push(`Files changed:\n${context.files.map(describeFile).join("\n")}`);
+    if (context.operation) {
+        sections.push(describeOperation(context.operation));
+    }
+
+    // The diff names every file it shows in a header, with its status; listing them again is noise.
+    const unlisted = context.diffedPaths ? context.files.filter(file => file.excluded || !context.diffedPaths!.has(file.path)) : context.files;
+    if (unlisted.length > 0) {
+        const heading = unlisted.length === context.files.length ? "Files changed:" : "Also changed, not shown in the diff:";
+        sections.push(`${heading}\n${unlisted.map(describeFile).join("\n")}`);
+    }
+
+    if (context.leftOut) {
+        sections.push(describeLeftOut(context.leftOut));
+    }
+
+    if (context.scopeUsage) {
+        sections.push(describeScopeUsage(context.scopeUsage));
+    }
 
     if (context.hint?.trim()) {
         sections.push(`The author started typing this. Treat it as a hint about intent, not as text to keep or correct; where it disagrees with the diff, the diff wins:\n  ${context.hint.trim()}`);

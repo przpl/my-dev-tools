@@ -1,4 +1,5 @@
 import { isMarkdownFile, outlineMarkdown, summarizeScript } from "./addedFileSummary";
+import { collapseMovedBlocks, type MovedBlock } from "./movedCode";
 
 /**
  * Compacts a unified diff into the smallest text that still answers "what changed". Everything a
@@ -35,6 +36,13 @@ export interface DiffFile {
     hunks: DiffHunk[];
     /** Replaces the body when there is nothing worth showing, e.g. `binary` or `formatting only`. */
     note?: string;
+    /** Lines the author added and removed, counted before compaction and shown in the header when asked for. */
+    lineCounts?: LineCounts;
+}
+
+export interface LineCounts {
+    added: number;
+    removed: number;
 }
 
 export interface CleanDiffOptions {
@@ -50,6 +58,32 @@ export interface CleanDiffOptions {
     outlineAddedMarkdownAboveLines?: number;
     /** Payload length each diff line is capped at, so one minified or embedded line costs a fixed price. 0 disables it. */
     maxLineLength?: number;
+    /**
+     * Appends `[+12 -3]` to each file header: the size of the change as written, which compaction
+     * hides once a body is summarized or truncated.
+     */
+    lineCounts?: boolean;
+    /**
+     * Blocks found by `findMovedBlocks` on the same raw diff. Each half of a move is sent as a single
+     * `-[12 lines moved to x]` / `+[12 lines moved from y]` line instead of in full.
+     */
+    movedBlocks?: MovedBlock[];
+}
+
+export function countChangedLines(file: DiffFile): LineCounts {
+    const counts = { added: 0, removed: 0 };
+
+    for (const hunk of file.hunks) {
+        for (const line of hunk.lines) {
+            if (line.startsWith("+")) {
+                counts.added++;
+            } else if (line.startsWith("-")) {
+                counts.removed++;
+            }
+        }
+    }
+
+    return counts;
 }
 
 /** Strips the `a/` or `b/` that `git diff` puts in front of every path. */
@@ -174,7 +208,7 @@ export function parseDiff(raw: string): DiffFile[] {
     return files.filter(parsed => parsed.path.length > 0);
 }
 
-function renderHeader(file: DiffFile): string {
+function renderHeaderName(file: DiffFile): string {
     switch (file.kind) {
         case "added":
             return `+++ NEW ${file.path}`;
@@ -185,6 +219,13 @@ function renderHeader(file: DiffFile): string {
         default:
             return `--- ${file.path}`;
     }
+}
+
+/** A noted file's size says nothing: a reformat or an import shuffle is as large as the file. */
+function renderHeader(file: DiffFile): string {
+    const counts = file.lineCounts;
+    const size = counts && !file.note && counts.added + counts.removed > 0 ? ` [+${counts.added} -${counts.removed}]` : "";
+    return `${renderHeaderName(file)}${size}`;
 }
 
 export function renderDiff(files: DiffFile[]): string {
@@ -457,14 +498,15 @@ export function cleanDiff(raw: string, options: CleanDiffOptions): string {
 
     const parsed = parseDiff(raw);
 
-    let files = parsed.map(file =>
-        options.formattingOnlyPaths?.has(file.path) && file.kind === "modified"
-            ? { ...file, hunks: [], note: "formatting only" }
-            : file
-    );
+    let files = parsed.map(file => {
+        const counted = options.lineCounts ? { ...file, lineCounts: countChangedLines(file) } : file;
+        return options.formattingOnlyPaths?.has(file.path) && file.kind === "modified" ? { ...counted, hunks: [], note: "formatting only" } : counted;
+    });
 
     // Summarizing runs first: it parses the `+` lines as source, which a capped line would break.
     files = summarizeAddedFiles(files, options);
+    // After summarizing: a new file reduced to its declarations says more about itself than a marker.
+    files = collapseMovedBlocks(files, parsed, options.movedBlocks ?? []);
     files = capLineLengths(files, options.maxLineLength ?? 0);
 
     if (renderDiff(files).split("\n").length > options.stripImportsAboveLines) {

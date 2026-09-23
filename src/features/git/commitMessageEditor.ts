@@ -22,6 +22,7 @@ interface Session {
     gitRoot: string;
     /** Repository-relative paths, so generation describes the selection rather than the repository. */
     paths: string[];
+    targetBranch?: string;
     comments: string;
     resolve: (message: string | undefined) => void;
     disposables: vscode.Disposable[];
@@ -135,7 +136,7 @@ export async function openCommitMessageEditor(gitRoot: string, paths: string[], 
 
     // Set before the editor is shown, not after: an editor appears on screen a moment before
     // `showTextDocument` resolves, and until the session exists its check mark does nothing.
-    session = { uri, gitRoot, paths, comments, resolve, disposables };
+    session = { uri, gitRoot, paths, targetBranch: options.targetBranch, comments, resolve, disposables };
 
     // The language comes from the file name, through the `myDevToolsCommit` contribution in
     // `package.json`. Deliberately not `git-commit`: the built-in Git extension puts its own
@@ -219,7 +220,7 @@ export async function generateCommitMessageInEditor(): Promise<void> {
     try {
         const message = await vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: "Generating commit message", cancellable: true },
-            (_progress, token) => generateCommitMessage(current.gitRoot, { paths: current.paths, hint }, token)
+            (_progress, token) => generateCommitMessage(current.gitRoot, { paths: current.paths, hint, targetBranch: current.targetBranch }, token)
         );
 
         if (!message) {
