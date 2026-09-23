@@ -7,9 +7,10 @@ import { buildSystemPrompt, buildUserPrompt, sanitizeCommitMessage, type CommitC
 import { cleanDiff, parseDiff } from "./diffCleaner";
 import { findGitDir } from "./gitCli";
 import { findMovedBlocks } from "./movedCode";
+import { readBranchVariables, resolveProjectInstructions } from "./projectInstructions";
 import { describingBranch, readBranch, readBranchCommits, readInProgressOperation, readScopeUsage } from "./repositoryState";
 
-import type * as vscode from "vscode";
+import * as vscode from "vscode";
 
 /** Ties the git side to the model side: gather, compact, prompt, sanitize. */
 
@@ -106,10 +107,14 @@ export async function buildCommitContext(gitRoot: string, options: GenerateOptio
 export async function generateCommitMessage(gitRoot: string, options: GenerateOptions = {}, token?: vscode.CancellationToken): Promise<string> {
     const context = await buildCommitContext(gitRoot, options);
 
+    const repository = vscode.Uri.file(gitRoot);
+    const variables = readBranchVariables(context.branch, Config.commitMessageBranchPattern(repository));
+    const instructions = resolveProjectInstructions(Config.commitMessageAdditionalInstructions(repository), variables);
+
     const reply = await getOpenRouter().chat(
         {
             messages: [
-                { role: "system", content: buildSystemPrompt(Config.commitMessageAdditionalInstructions) },
+                { role: "system", content: buildSystemPrompt(instructions) },
                 { role: "user", content: buildUserPrompt(context) },
             ],
             temperature: 0.2,

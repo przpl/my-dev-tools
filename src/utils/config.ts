@@ -31,6 +31,11 @@ class ConfigManager {
         return vscode.workspace.getConfiguration("myDevTools");
     }
 
+    /** For settings a folder of a multi-root workspace can override. */
+    private scoped(resource: vscode.Uri | undefined) {
+        return vscode.workspace.getConfiguration("myDevTools", resource);
+    }
+
     get enableRealTimePropsUpdate(): boolean {
         return this.config.get<boolean>("enableRealTimePropsUpdate", false);
     }
@@ -75,8 +80,13 @@ class ConfigManager {
         return this.config.get<string[]>("commitMessage.excludeGlobs", DEFAULT_COMMIT_MESSAGE_EXCLUDES);
     }
 
-    get commitMessageAdditionalInstructions(): string {
-        return this.config.get<string>("commitMessage.additionalInstructions", "");
+    /** Read for the repository, so each folder of a multi-root workspace keeps its own conventions. */
+    commitMessageAdditionalInstructions(repository?: vscode.Uri): string {
+        return this.scoped(repository).get<string>("commitMessage.additionalInstructions", "");
+    }
+
+    commitMessageBranchPattern(repository?: vscode.Uri): string {
+        return this.scoped(repository).get<string>("commitMessage.branchPattern", "");
     }
 
     /** Raw definitions: validation lives in the AI command registry, which reports per-command. */

@@ -155,8 +155,15 @@
                 "myDevTools.commitMessage.additionalInstructions": {
                     "type": "string",
                     "default": "",
+                    "scope": "resource",
                     "editPresentation": "multilineText",
-                    "description": "Extra instructions appended to the commit message prompt, for project-specific conventions"
+                    "markdownDescription": "Extra instructions appended to the commit message prompt, for project-specific conventions. They take precedence over the built-in rules. `${branch}` stands for the branch the commit lands on, and each named group of `#myDevTools.commitMessage.branchPattern#` for its match, e.g. `${ticket}`. A line using a placeholder the branch does not provide is left out, so `Put [${ticket}] right after the type, e.g. fix: [${ticket}] handle empty cart` only applies on ticket branches"
+                },
+                "myDevTools.commitMessage.branchPattern": {
+                    "type": "string",
+                    "default": "",
+                    "scope": "resource",
+                    "markdownDescription": "Regular expression matched against the branch name. Its named groups become placeholders in `#myDevTools.commitMessage.additionalInstructions#`: `^(?<ticket>[a-z]+-\\d+)` turns `mvp-123-fix-something` into `${ticket}` = `mvp-123`"
                 },
                 "myDevTools.ai.commands": {
                     "type": "array",

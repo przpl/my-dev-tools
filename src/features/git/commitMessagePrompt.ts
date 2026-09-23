@@ -145,7 +145,7 @@ from their names.`;
 
 export function buildSystemPrompt(additionalInstructions: string): string {
     const extra = additionalInstructions.trim();
-    return [COMMIT_MESSAGE_SPEC, OUTPUT_RULES, extra && `## Additional project instructions\n\n${extra}`]
+    return [COMMIT_MESSAGE_SPEC, OUTPUT_RULES, extra && `## Additional project instructions\n\nThese are this project's conventions. Where they conflict with the rules above, they win.\n\n${extra}`]
         .filter(Boolean)
         .join("\n\n");
 }
@@ -187,7 +187,7 @@ function nameFiles(paths: string[]): string {
 function describeBranch(branch: string, commits: BranchCommits | undefined): string {
     const lines = [
         `Branch: ${branch}`,
-        "The branch name often carries the intent behind the change, sometimes its type or an issue key. Use it to understand why, not as text to copy; where it disagrees with the diff, the diff wins. " +
+        "The branch name often carries the intent behind the change, sometimes its type or an issue key. Use it to understand why, not as text to copy unless the project instructions say so; where it disagrees with the diff, the diff wins. " +
             "A branch covers many commits, so describe this change, not the whole branch. Add an issue footer only when the key is unambiguous.",
     ];
 

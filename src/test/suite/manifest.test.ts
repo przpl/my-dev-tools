@@ -29,7 +29,7 @@ function readCodeDefaults(extensionPath: string): Map<string, unknown> {
     const source = fs.readFileSync(path.join(extensionPath, "src", "utils", "config.ts"), "utf8");
     const defaults = new Map<string, unknown>();
 
-    for (const [, key, literal] of source.matchAll(/this\.config\.get<[^>]*>\("([^"]+)",\s*([\s\S]*?)\);/g)) {
+    for (const [, key, literal] of source.matchAll(/this\.(?:config|scoped\(\w*\))\.get<[^>]*>\("([^"]+)",\s*([\s\S]*?)\);/g)) {
         // The one fallback that is not a literal; it is exported so this test can compare it.
         defaults.set(`myDevTools.${key}`, literal === "DEFAULT_COMMIT_MESSAGE_EXCLUDES" ? DEFAULT_COMMIT_MESSAGE_EXCLUDES : JSON.parse(literal));
     }
@@ -82,7 +82,7 @@ suite("Manifest Tests", () => {
 
         // A regex over the source is only as good as its match count; this guards against it silently
         // reading nothing after `config.ts` is reformatted.
-        assert.strictEqual(codeDefaults.size, 17, "Expected 17 settings in config.ts");
+        assert.strictEqual(codeDefaults.size, 18, "Expected 18 settings in config.ts");
 
         assert.deepStrictEqual(
             [...codeDefaults.keys()].filter(key => !(key in declared)),

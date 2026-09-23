@@ -130,7 +130,8 @@ suite("CommitMessagePrompt Tests", () => {
             assert.ok(!buildSystemPrompt("  \n ").includes("Additional project instructions"));
 
             const withExtra = buildSystemPrompt("  Always mention the ticket.  ");
-            assert.ok(withExtra.includes("## Additional project instructions\n\nAlways mention the ticket."), withExtra);
+            assert.ok(withExtra.includes("## Additional project instructions\n\n"), withExtra);
+            assert.ok(withExtra.endsWith("\n\nAlways mention the ticket."), withExtra);
         });
     });
 });
