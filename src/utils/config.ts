@@ -49,7 +49,7 @@ class ConfigManager {
     }
 
     get openRouterModel(): string {
-        return this.config.get<string>("openRouter.model", "openai/gpt-5.6-luna");
+        return this.config.get<string>("openRouter.model", "openai/gpt-6-luna");
     }
 
     get openRouterBaseUrl(): string {

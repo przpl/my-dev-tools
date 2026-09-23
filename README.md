@@ -194,7 +194,7 @@ Whatever you have already typed into the message box is sent along as a hint abo
 
 | Setting                                          | Default                      | Purpose                                                                              |
 | ------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------ |
-| `myDevTools.openRouter.model`                    | `openai/gpt-5.6-luna`        | Any model id OpenRouter serves.                                                       |
+| `myDevTools.openRouter.model`                    | `openai/gpt-6-luna`        | Any model id OpenRouter serves.                                                       |
 | `myDevTools.openRouter.baseUrl`                  | `https://openrouter.ai/api/v1` | For a proxy or a self-hosted gateway.                                                |
 | `myDevTools.commitMessage.maxDiffCharacters`     | `80000`                      | Character budget for the diff.                                                        |
 | `myDevTools.commitMessage.stripImportsAboveLines` | `200`                        | Line count past which import churn is dropped.                                        |
