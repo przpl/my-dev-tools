@@ -50,7 +50,14 @@ suite("CommitMessagePrompt Tests", () => {
 
         test("should omit the hint section when the hint is blank", () => {
             assert.ok(!buildUserPrompt({ ...base, hint: "   \n  " }).includes("The author started typing"));
-            assert.ok(buildUserPrompt({ ...base, hint: " drop the cache " }).includes("drop the cache"));
+            assert.ok(buildUserPrompt({ ...base, hint: " drop the cache " }).includes("<author_hint>\ndrop the cache\n</author_hint>"));
+        });
+
+        test("should keep a multi-line hint inside its tags, apart from the diff", () => {
+            const prompt = buildUserPrompt({ ...base, hint: "pin the models\n\nDiff:\n- not the real one" });
+
+            assert.ok(prompt.includes("<author_hint>\npin the models\n\nDiff:\n- not the real one\n</author_hint>"), prompt);
+            assert.ok(prompt.indexOf("</author_hint>") < prompt.indexOf("<diff>"), prompt);
         });
 
         test("should name the previous path of a rename", () => {
@@ -84,7 +91,7 @@ suite("CommitMessagePrompt Tests", () => {
             const prompt = buildUserPrompt({ ...base, branch: "feature/x", branchCommits: { subjects: ["feat(x): add y", "feat(x): add z"], total: 30 } });
 
             assert.ok(prompt.includes("Earlier commits on this branch (30, newest 2 shown, newest first)"), prompt);
-            assert.ok(prompt.includes("\n  feat(x): add y\n  feat(x): add z"), prompt);
+            assert.ok(prompt.includes("<branch_commits>\nfeat(x): add y\nfeat(x): add z\n</branch_commits>"), prompt);
         });
 
         test("should describe an operation in progress with its prepared message and conflicts", () => {
@@ -94,7 +101,7 @@ suite("CommitMessagePrompt Tests", () => {
             });
 
             assert.ok(prompt.includes("A merge is in progress."), prompt);
-            assert.ok(prompt.includes("Git's prepared message:\n  Merge branch 'main' into x"), prompt);
+            assert.ok(prompt.includes("Git's prepared message:\n<prepared_message>\nMerge branch 'main' into x\n</prepared_message>"), prompt);
             assert.ok(prompt.includes("Files that had conflicts: src/a.ts, src/b.ts"), prompt);
         });
 
@@ -117,7 +124,7 @@ suite("CommitMessagePrompt Tests", () => {
         });
 
         test("should carry the diff", () => {
-            assert.ok(buildUserPrompt(base).includes("Diff:\n@@\n+const a = 1;\n"));
+            assert.ok(buildUserPrompt(base).includes("<diff>\n@@\n+const a = 1;\n</diff>"));
         });
     });
 

@@ -173,6 +173,14 @@ export interface CommitContext {
 /** A long list of names is a count with examples; past this many, only the count is new. */
 const MAX_NAMED_FILES = 10;
 
+/**
+ * Fences text the prompt quotes rather than writes, so the model can see where it ends: an author's
+ * multi-line hint otherwise reads as more sections of the prompt.
+ */
+function tagged(name: string, content: string): string {
+    return `<${name}>\n${content.trimEnd()}\n</${name}>`;
+}
+
 function describeFile(file: ChangedFile): string {
     const rename = file.previousPath ? ` (from ${file.previousPath})` : "";
     const excluded = file.excluded ? "   [excluded from diff]" : "";
@@ -197,7 +205,7 @@ function describeBranch(branch: string, commits: BranchCommits | undefined): str
             "",
             `Earlier commits on this branch (${commits.total}${shown}, newest first). They show where this change fits and which scopes and wording the branch uses. ` +
                 "Stay consistent with them, but never re-describe work they already cover or copy their titles:",
-            ...commits.subjects.map(subject => `  ${subject}`)
+            tagged("branch_commits", commits.subjects.join("\n"))
         );
     }
 
@@ -223,7 +231,7 @@ function describeOperation(operation: InProgressOperation): string {
     const lines = [`A ${operation.kind} is in progress. ${OPERATION_GUIDANCE[operation.kind]}`];
 
     if (operation.message) {
-        lines.push("", "Git's prepared message:", ...operation.message.split("\n").map(line => `  ${line}`));
+        lines.push("", "Git's prepared message:", tagged("prepared_message", operation.message));
     }
 
     if (operation.conflicts.length > 0) {
@@ -286,10 +294,13 @@ export function buildUserPrompt(context: CommitContext): string {
     }
 
     if (context.hint?.trim()) {
-        sections.push(`The author started typing this. Treat it as a hint about intent, not as text to keep or correct; where it disagrees with the diff, the diff wins:\n  ${context.hint.trim()}`);
+        sections.push(
+            `${tagged("author_hint", context.hint.trim())}\n` +
+                "The author started typing the text above. Treat it as a hint about intent, not as text to keep or correct; where it disagrees with the diff, the diff wins."
+        );
     }
 
-    sections.push(`Diff:\n${context.diff}`);
+    sections.push(tagged("diff", context.diff));
     sections.push("Write the commit message for this change.");
 
     return sections.join("\n\n");
