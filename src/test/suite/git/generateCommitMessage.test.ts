@@ -232,7 +232,7 @@ suite("GenerateCommitMessage Tests", () => {
             const context = await buildCommitContext(repo);
 
             assert.strictEqual(context.operation?.kind, "merge");
-            assert.ok(context.operation?.message?.startsWith("Merge branch 'main' into feature/limits"), context.operation?.message);
+            assert.ok(context.operation?.message?.startsWith("Merge branch 'main' into feature/limits"), context.operation?.message ?? "no operation message");
             assert.deepStrictEqual(context.operation?.conflicts, ["src/app.ts"]);
         });
 
@@ -248,7 +248,7 @@ suite("GenerateCommitMessage Tests", () => {
 
             const picked = await buildCommitContext(repo);
             assert.strictEqual(picked.operation?.kind, "cherry-pick");
-            assert.ok(picked.operation?.message?.startsWith("fix(app): lower the ceiling"), picked.operation?.message);
+            assert.ok(picked.operation?.message?.startsWith("fix(app): lower the ceiling"), picked.operation?.message ?? "no operation message");
 
             git(repo, ["cherry-pick", "--abort"]);
             assert.throws(() => git(repo, ["rebase", "main"]));
